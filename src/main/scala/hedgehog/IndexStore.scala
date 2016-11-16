@@ -13,16 +13,22 @@ import scala.math.max
 class IndexStore[K <: JavaSerializable](
     filename: Path = Files.createTempFile("idx-", ".hdg"),
     initialCapacity: Int = 0,
-    initialFileSizeBytes: Long = 0) {
+    initialFileSizeBytes: Long = 0,
+    deleteOnClose: Boolean = true) {
   private var capacity = max(initialCapacity, 1024)
   private var currentSize = 0
 
   private var buffer: MappedByteBuffer = {
-    val fc = FileChannel.open(filename, CREATE, READ, WRITE, DELETE_ON_CLOSE)
+    val openOptions = Seq(CREATE, READ, WRITE) ++ (if (deleteOnClose) Seq(DELETE_ON_CLOSE) else Seq())
+    val fc = FileChannel.open(filename, openOptions:_*)
     val fileSizeBytes = max(initialFileSizeBytes, 1024 * 1024)
     try { fc.map(READ_WRITE, 0, fileSizeBytes) } finally { fc.close() }
   }
-  clear()
+  if (!deleteOnClose && Files.exists(filename)) {
+    restore()
+  } else {
+    clear()
+  }
 
   def get(key: K): Option[(Int, Int)] =
     findIndex(key).map { case (_, ih) => (ih.valuePosition, ih.valueLength) }
@@ -65,6 +71,7 @@ class IndexStore[K <: JavaSerializable](
     capacity = max(initialCapacity, 1024)
     currentSize = 0
     buffer.position(0)
+    buffer.putInt(capacity)
     (0 until capacity).foreach(_ => buffer.putInt(0))
   }
 
@@ -74,6 +81,19 @@ class IndexStore[K <: JavaSerializable](
         putIntByIndex(i, 0)
         currentSize = currentSize - 1
       case _ => Unit
+    }
+  }
+
+  private def restore(): Unit = {
+    buffer.position(0)
+    capacity = buffer.getInt
+    if (capacity > 0) {
+      val maxPosition = (0 until capacity).map(i => getIntByIndex(i)).max
+      buffer.position(maxPosition)
+      val lengthAtMaxPosition = buffer.getInt
+      buffer.position(maxPosition + lengthAtMaxPosition + 4)
+    } else {
+      clear()
     }
   }
 
@@ -123,13 +143,13 @@ class IndexStore[K <: JavaSerializable](
 
   private def getIntByIndex(index: Int): Int = {
     val mark = buffer.position
-    buffer.position(index * 4)
+    buffer.position((index + 1) * 4)
     try { buffer.getInt } finally { buffer.position(mark) }
   }
 
   private def putIntByIndex(index: Int, n: Int): Unit = {
     val mark = buffer.position
-    buffer.position(index * 4)
+    buffer.position((index + 1) * 4)
     buffer.putInt(n)
     buffer.position(mark)
   }

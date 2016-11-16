@@ -1,5 +1,7 @@
 package hedgehog
 
+import java.nio.file.Files
+
 import org.scalatest.{FunSpec, Matchers}
 
 class IndexStoreSpec extends FunSpec with Matchers {
@@ -7,19 +9,19 @@ class IndexStoreSpec extends FunSpec with Matchers {
     it("puts and gets a key") {
       val indexStore = new IndexStore[String]
       indexStore.put("testKey1", 42, 3)
-      indexStore.get("testKey1") shouldBe Some((42L, 3))
+      indexStore.get("testKey1") shouldBe Some((42, 3))
     }
 
     it("puts and gets multiple interleaved keys") {
       val indexStore = new IndexStore[String]
       indexStore.put("testKey1", 42, 3)
       indexStore.put("testKey456", 43, 5)
-      indexStore.get("testKey1") shouldBe Some((42L, 3))
-      indexStore.get("testKey456") shouldBe Some((43L, 5))
+      indexStore.get("testKey1") shouldBe Some((42, 3))
+      indexStore.get("testKey456") shouldBe Some((43, 5))
       indexStore.put("testKey2", 44, 7)
-      indexStore.get("testKey2") shouldBe Some((44L, 7))
+      indexStore.get("testKey2") shouldBe Some((44, 7))
       indexStore.put("testKey3", 45, 11)
-      indexStore.get("testKey3") shouldBe Some((45L, 11))
+      indexStore.get("testKey3") shouldBe Some((45, 11))
     }
 
     it("returns None if a given key does not exist") {
@@ -32,9 +34,9 @@ class IndexStoreSpec extends FunSpec with Matchers {
       indexStore.put("testKey1", 42, 3)
       indexStore.put("testKey1", 43, 5)
 
-      indexStore.get("testKey1") shouldBe Some((43L, 5))
+      indexStore.get("testKey1") shouldBe Some((43, 5))
       indexStore.size shouldBe 1
-      indexStore.entries shouldEqual Seq(("testKey1", (43L, 5)))
+      indexStore.entries shouldEqual Seq(("testKey1", (43, 5)))
     }
 
     it("correctly stores and retrieves different keys with identical hash codes") {
@@ -44,9 +46,9 @@ class IndexStoreSpec extends FunSpec with Matchers {
       indexStore.put(IdenticalHashCodeKey("testKey2"), 43, 5)
       indexStore.put(IdenticalHashCodeKey("testKey3"), 44, 7)
 
-      indexStore.get(IdenticalHashCodeKey("testKey1")) shouldBe Some((42L, 3))
-      indexStore.get(IdenticalHashCodeKey("testKey2")) shouldBe Some((43L, 5))
-      indexStore.get(IdenticalHashCodeKey("testKey3")) shouldBe Some((44L, 7))
+      indexStore.get(IdenticalHashCodeKey("testKey1")) shouldBe Some((42, 3))
+      indexStore.get(IdenticalHashCodeKey("testKey2")) shouldBe Some((43, 5))
+      indexStore.get(IdenticalHashCodeKey("testKey3")) shouldBe Some((44, 7))
     }
 
     it("returns the correct size") {
@@ -65,9 +67,9 @@ class IndexStoreSpec extends FunSpec with Matchers {
       indexStore.put("testKey3", 3, 3)
 
       indexStore.entries.toSet shouldEqual Set(
-        ("testKey1", (1L, 1)),
-        ("testKey2", (2L, 2)),
-        ("testKey3", (3L, 3)))
+        ("testKey1", (1, 1)),
+        ("testKey2", (2, 2)),
+        ("testKey3", (3, 3)))
     }
 
     it("indicated if a store contains a given key") {
@@ -127,8 +129,44 @@ class IndexStoreSpec extends FunSpec with Matchers {
       indexStore.put(key1, 1, 1)
       indexStore.put(key2, 2, 2)
 
-      indexStore.get(key1) shouldBe Some((1L, 1))
-      indexStore.get(key2) shouldBe Some((2L, 2))
+      indexStore.get(key1) shouldBe Some((1, 1))
+      indexStore.get(key2) shouldBe Some((2, 2))
+    }
+
+    it("stores an item with a hashcode of zero (ensures we preserve capacity at position 0)") {
+      val indexStore = new IndexStore[Integer]
+      indexStore.put(0, 42, 7)
+      indexStore.get(0) shouldBe Some((42, 7))
+    }
+
+    it("creates a persistent index store") {
+      val filename = Files.createTempFile("idx-", ".hdg")
+      try {
+        val indexStore1= new IndexStore[String](filename = filename, deleteOnClose = false)
+        indexStore1.put("Test Key", 1, 1)
+
+        val indexStore2 = new IndexStore[String](filename = filename, deleteOnClose = false)
+        indexStore2.get("Test Key") shouldBe Some((1, 1))
+      } finally {
+        Files.delete(filename)
+      }
+    }
+
+    it("successfully appends to the end of a restored persistent index store") {
+      val filename = Files.createTempFile("idx-", ".hdg")
+      try {
+        val indexStore1= new IndexStore[String](filename = filename, deleteOnClose = false)
+        indexStore1.put("Test Key", 1, 1)
+
+        val indexStore2 = new IndexStore[String](filename = filename, deleteOnClose = false)
+        indexStore2.put("Test Key2", 2, 2)
+
+        indexStore2.entries.toSet shouldEqual Set(
+          ("Test Key", (1, 1)),
+          ("Test Key2", (2, 2)))
+      } finally {
+        Files.delete(filename)
+      }
     }
   }
 }
