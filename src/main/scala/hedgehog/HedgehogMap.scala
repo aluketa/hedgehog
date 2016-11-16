@@ -13,8 +13,9 @@ import java.util.{Map => JavaMap}
 
 import scala.collection.JavaConversions._
 import scala.math.max
+import scala.reflect.ClassTag
 
-class HedgehogMap[K <: JavaSerializable, V <: JavaSerializable](
+class HedgehogMap[K <: JavaSerializable: ClassTag, V <: JavaSerializable](
     filename: Path = Files.createTempFile("map-", ".hdg"),
     initialFileSizeBytes: Long = 0) extends JavaMap[K, V] {
 
