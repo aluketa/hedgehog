@@ -15,8 +15,8 @@ class HedgehogMapSpec extends FunSpec with Matchers {
 
     it("updates an existing value") {
       val map = new HedgehogMap[String, String]
-      map.put("Test", "Data")
-      map.put("Test", "Updated Data")
+      map.put("Test", "Data") shouldBe null
+      map.put("Test", "Updated Data") shouldEqual "Data"
 
       map.get("Test") shouldEqual "Updated Data"
     }

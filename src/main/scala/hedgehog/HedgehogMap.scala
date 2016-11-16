@@ -28,6 +28,7 @@ class HedgehogMap[K, V <: JavaSerializable](
 
   override def put(key: K, value: V): V = {
     try {
+      val previousValue = get(key)
       val data = valueToBytes(value)
       if (buffer.capacity < buffer.position + data.length) {
         grow(max(buffer.capacity + data.length, buffer.capacity + (buffer.capacity << 1)))
@@ -36,7 +37,7 @@ class HedgehogMap[K, V <: JavaSerializable](
       val writePosition = buffer.position
       buffer.put(data)
       indexAndLengthMap.put(key, (writePosition, data.length))
-      value
+      previousValue
     } finally {
       buffer.force()
     }
