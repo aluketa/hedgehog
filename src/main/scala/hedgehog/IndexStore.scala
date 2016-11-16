@@ -22,12 +22,12 @@ class IndexStore[K <: JavaSerializable](
     val fileSizeBytes = max(initialFileSizeBytes, 1024 * 1024)
     try { fc.map(READ_WRITE, 0, fileSizeBytes) } finally { fc.close() }
   }
-  buffer.putInt(0, capacity)
-  (1 to capacity).foreach(_ => buffer.putInt(0))
+  clear()
 
-  def get(key: K): Option[(Long, Int)] = findIndex(key).map(ih => (ih.valuePosition, ih.valueLength))
+  def get(key: K): Option[(Int, Int)] =
+    findIndex(key).map { case (_, ih) => (ih.valuePosition, ih.valueLength) }
 
-  def put(key: K, valuePosition: Long, valueLength: Int): Unit = {
+  def put(key: K, valuePosition: Int, valueLength: Int): Unit = {
     val indexHolderBytes: Array[Byte] = IndexHolder(key, valuePosition, valueLength).getBytes
 
     if (currentSize > capacity / 2) {
@@ -50,7 +50,7 @@ class IndexStore[K <: JavaSerializable](
     buffer.force()
   }
 
-  def entries: Iterable[(K, (Long, Int))] =
+  def entries: Iterable[(K, (Int, Int))] =
     (0 until capacity)
       .map(i => getIntByIndex(i))
       .filter(_ != 0)
@@ -58,6 +58,24 @@ class IndexStore[K <: JavaSerializable](
       .map(h => (h.key, (h.valuePosition, h.valueLength)))
 
   def size: Int = currentSize
+
+  def contains(key: K): Boolean = findIndex(key).isDefined
+
+  def clear(): Unit = {
+    capacity = max(initialCapacity, 1024)
+    currentSize = 0
+    buffer.position(0)
+    (0 until capacity).foreach(_ => buffer.putInt(0))
+  }
+
+  def remove(key: K): Unit = {
+    findIndex(key) match {
+      case Some((i, _)) =>
+        putIntByIndex(i, 0)
+        currentSize = currentSize - 1
+      case _ => Unit
+    }
+  }
 
   @tailrec
   private def nextIndex(key: K, offset: Int = 0): (Int, Boolean) = {
@@ -77,7 +95,7 @@ class IndexStore[K <: JavaSerializable](
   }
 
   @tailrec
-  private def findIndex(key: K, offset: Int = 0): Option[IndexHolder[K]] = {
+  private def findIndex(key: K, offset: Int = 0): Option[(Int, IndexHolder[K])] = {
     val index = ((key.hashCode.abs % capacity) + offset) % capacity
     val indexValue = getIntByIndex(index)
     if (indexValue == 0L) {
@@ -85,7 +103,7 @@ class IndexStore[K <: JavaSerializable](
     } else {
       val indexHolder = indexHolderFor(indexValue)
       if (indexHolder.key == key) {
-        Some(indexHolder)
+        Some((index, indexHolder))
       } else {
         findIndex(key, offset + 1)
       }
@@ -132,6 +150,6 @@ object IndexHolder {
   def apply[K <: JavaSerializable](bytes: Array[Byte]): IndexHolder[K] = bytesToValue(bytes)
 }
 
-case class IndexHolder[K <: JavaSerializable](key: K, valuePosition: Long, valueLength: Int) {
+case class IndexHolder[K <: JavaSerializable](key: K, valuePosition: Int, valueLength: Int) {
   def getBytes: Array[Byte] = valueToBytes(this)
 }

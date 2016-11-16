@@ -6,19 +6,19 @@ class IndexStoreSpec extends FunSpec with Matchers {
   describe("Index Store") {
     it("puts and gets a key") {
       val indexStore = new IndexStore[String]
-      indexStore.put("testKey1", 42L, 3)
+      indexStore.put("testKey1", 42, 3)
       indexStore.get("testKey1") shouldBe Some((42L, 3))
     }
 
     it("puts and gets multiple interleaved keys") {
       val indexStore = new IndexStore[String]
-      indexStore.put("testKey1", 42L, 3)
-      indexStore.put("testKey456", 43L, 5)
+      indexStore.put("testKey1", 42, 3)
+      indexStore.put("testKey456", 43, 5)
       indexStore.get("testKey1") shouldBe Some((42L, 3))
       indexStore.get("testKey456") shouldBe Some((43L, 5))
-      indexStore.put("testKey2", 44L, 7)
+      indexStore.put("testKey2", 44, 7)
       indexStore.get("testKey2") shouldBe Some((44L, 7))
-      indexStore.put("testKey3", 45L, 11)
+      indexStore.put("testKey3", 45, 11)
       indexStore.get("testKey3") shouldBe Some((45L, 11))
     }
 
@@ -29,8 +29,8 @@ class IndexStoreSpec extends FunSpec with Matchers {
 
     it("overwrites an existing key") {
       val indexStore = new IndexStore[String]
-      indexStore.put("testKey1", 42L, 3)
-      indexStore.put("testKey1", 43L, 5)
+      indexStore.put("testKey1", 42, 3)
+      indexStore.put("testKey1", 43, 5)
 
       indexStore.get("testKey1") shouldBe Some((43L, 5))
       indexStore.size shouldBe 1
@@ -40,9 +40,9 @@ class IndexStoreSpec extends FunSpec with Matchers {
     it("correctly stores and retrieves different keys with identical hash codes") {
       val indexStore = new IndexStore[IdenticalHashCodeKey]
 
-      indexStore.put(IdenticalHashCodeKey("testKey1"), 42L, 3)
-      indexStore.put(IdenticalHashCodeKey("testKey2"), 43L, 5)
-      indexStore.put(IdenticalHashCodeKey("testKey3"), 44L, 7)
+      indexStore.put(IdenticalHashCodeKey("testKey1"), 42, 3)
+      indexStore.put(IdenticalHashCodeKey("testKey2"), 43, 5)
+      indexStore.put(IdenticalHashCodeKey("testKey3"), 44, 7)
 
       indexStore.get(IdenticalHashCodeKey("testKey1")) shouldBe Some((42L, 3))
       indexStore.get(IdenticalHashCodeKey("testKey2")) shouldBe Some((43L, 5))
@@ -51,23 +51,66 @@ class IndexStoreSpec extends FunSpec with Matchers {
 
     it("returns the correct size") {
       val indexStore = new IndexStore[String]
-      indexStore.put("testKey1", 1L, 1)
-      indexStore.put("testKey2", 2L, 2)
-      indexStore.put("testKey3", 3L, 3)
+      indexStore.put("testKey1", 1, 1)
+      indexStore.put("testKey2", 2, 2)
+      indexStore.put("testKey3", 3, 3)
 
       indexStore.size shouldBe 3
     }
 
     it("returns all entries") {
       val indexStore = new IndexStore[String]
-      indexStore.put("testKey1", 1L, 1)
-      indexStore.put("testKey2", 2L, 2)
-      indexStore.put("testKey3", 3L, 3)
+      indexStore.put("testKey1", 1, 1)
+      indexStore.put("testKey2", 2, 2)
+      indexStore.put("testKey3", 3, 3)
 
       indexStore.entries.toSet shouldEqual Set(
         ("testKey1", (1L, 1)),
         ("testKey2", (2L, 2)),
         ("testKey3", (3L, 3)))
+    }
+
+    it("indicated if a store contains a given key") {
+      val indexStore = new IndexStore[String]
+      indexStore.put("testKey1", 1, 1)
+
+      indexStore.contains("testKey1") shouldBe true
+      indexStore.contains("non-existent") shouldBe false
+    }
+
+    it("clears the index store") {
+      val indexStore = new IndexStore[String]
+      indexStore.put("testKey1", 1, 1)
+      indexStore.put("testKey2", 2, 2)
+      indexStore.put("testKey3", 3, 3)
+      indexStore.clear()
+
+      indexStore.size shouldBe 0
+      indexStore.entries shouldBe empty
+      indexStore.contains("testKey1") shouldBe false
+      indexStore.contains("testKey2") shouldBe false
+      indexStore.contains("testKey3") shouldBe false
+    }
+
+    it("removes an item from the store") {
+      val indexStore = new IndexStore[String]
+      indexStore.put("testKey1", 1, 1)
+      indexStore.put("testKey2", 2, 2)
+
+      indexStore.remove("testKey1")
+
+      indexStore.size shouldBe 1
+      indexStore.entries shouldEqual Seq(("testKey2", (2, 2)))
+      indexStore.contains("testKey1") shouldBe false
+      indexStore.contains("testKey2") shouldBe true
+    }
+
+    it("removing a non-existing item does not impact store size") {
+      val indexStore = new IndexStore[String]
+      indexStore.put("testKey1", 1, 1)
+
+      indexStore.remove("non-existent")
+      indexStore.size shouldBe 1
     }
 
     it("supports entry of more keys than the initial capacity of 1024 entries") {
@@ -81,8 +124,8 @@ class IndexStoreSpec extends FunSpec with Matchers {
       val key2: String = "y" * 1024 * 1024
 
       val indexStore = new IndexStore[String]
-      indexStore.put(key1, 1L, 1)
-      indexStore.put(key2, 2L, 2)
+      indexStore.put(key1, 1, 1)
+      indexStore.put(key2, 2, 2)
 
       indexStore.get(key1) shouldBe Some((1L, 1))
       indexStore.get(key2) shouldBe Some((2L, 2))

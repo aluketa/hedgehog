@@ -9,17 +9,16 @@ import java.nio.file.StandardOpenOption._
 import java.util
 import java.util.AbstractMap.SimpleEntry
 import java.util.Map.Entry
-import java.util.concurrent.ConcurrentHashMap
 import java.util.{Map => JavaMap}
 
 import scala.collection.JavaConversions._
 import scala.math.max
 
-class HedgehogMap[K, V <: JavaSerializable](
+class HedgehogMap[K <: JavaSerializable, V <: JavaSerializable](
     filename: Path = Files.createTempFile("map-", ".hdg"),
     initialFileSizeBytes: Long = 0) extends JavaMap[K, V] {
 
-  private val indexAndLengthMap = new ConcurrentHashMap[K, (Int, Int)]()
+  private val indexStore = new IndexStore[K]()
   private var buffer: MappedByteBuffer = {
     val fc = FileChannel.open(filename, CREATE, READ, WRITE, DELETE_ON_CLOSE)
     val fileSizeBytes = max(initialFileSizeBytes, 1024 * 1024)
@@ -36,60 +35,64 @@ class HedgehogMap[K, V <: JavaSerializable](
 
       val writePosition = buffer.position
       buffer.put(data)
-      indexAndLengthMap.put(key, (writePosition, data.length))
+      indexStore.put(key, writePosition, data.length)
       previousValue
     } finally {
       buffer.force()
     }
   }
 
-  override def get(key: scala.Any): V = {
-    Option(indexAndLengthMap.get(key)) match {
-      case Some((p, l)) => getValueAt(p, l)
-      case _ => null.asInstanceOf[V]
-    }
+  override def get(key: scala.Any): V = key match {
+    case typedKey: K =>
+      indexStore.get(typedKey) match {
+        case Some((p, l)) => getValueAt(p, l)
+        case _ => null.asInstanceOf[V]
+      }
+    case _ => null.asInstanceOf[V]
   }
 
-  override def containsKey(key: scala.Any): Boolean = indexAndLengthMap.keySet.contains(key)
+  override def containsKey(key: scala.Any): Boolean = key match {
+    case typedKey: K => indexStore.contains(typedKey)
+    case _ => false
+  }
 
-  override def keySet: util.Set[K] = indexAndLengthMap.keySet
+  override def keySet: util.Set[K] = indexStore.entries.map(_._1).toSet[K]
 
-  override def values: util.Collection[V] =
-    indexAndLengthMap.keySet.map(k => get(k))
+  override def values: util.Collection[V] = indexStore.entries.map { case (_, (p, l)) => getValueAt(p, l) }
 
   override def entrySet: util.Set[Entry[K, V]] =
-    setAsJavaSet(indexAndLengthMap.keySet.map(k => new SimpleEntry[K, V](k, get(k))))
+    setAsJavaSet(indexStore.entries.map { case (k, (p, l)) => new SimpleEntry[K, V](k, getValueAt(p, l)) }.toSet)
 
-  override def size: Int = indexAndLengthMap.size
+  override def size: Int = indexStore.size
 
   override def clear(): Unit = {
-    indexAndLengthMap.clear()
+    indexStore.clear()
     buffer.position(0)
   }
 
   override def remove(key: scala.Any): V = {
     val result = get(key)
-    indexAndLengthMap.remove(key)
+    key match {
+      case typedKey: K => indexStore.remove(typedKey)
+      case _ => Unit
+    }
+
     result
   }
 
   override def containsValue(value: scala.Any): Boolean =
     values.contains(value)
 
-  override def isEmpty: Boolean = indexAndLengthMap.isEmpty
+  override def isEmpty: Boolean = indexStore.size == 0
 
   override def putAll(m: JavaMap[_ <: K, _ <: V]): Unit =
     m.foreach { case(k, v) => put(k, v) }
 
   private def grow(newFileSize: Long): Unit = {
     val tempMap = new HedgehogMap[K, V](Files.createTempFile("map-", ".hdg"), newFileSize)
-    indexAndLengthMap.entrySet
-      .map(e => (e.getKey, e.getValue))
-      .foreach { case (k, (p, l)) => tempMap.put(k, getValueAt(p, l)) }
+    indexStore.entries.foreach { case (k, (p, l)) => tempMap.put(k, getValueAt(p, l)) }
     val newMap = new HedgehogMap[K, V](filename, newFileSize)
-    indexAndLengthMap.entrySet
-        .map(e => (e.getKey, e.getValue))
-        .foreach { case (k, (p, l)) => newMap.put(k, tempMap.getValueAt(p, l)) }
+    indexStore.entries.foreach { case (k, (p, l)) => newMap.put(k, tempMap.getValueAt(p, l)) }
 
     buffer = newMap.buffer
     buffer.force()
