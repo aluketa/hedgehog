@@ -121,5 +121,17 @@ class HedgehogMapSpec extends FunSpec with Matchers {
         ("Test2", "Data2"),
         ("Test3", "Data3"))
     }
+
+    it("stores data larger than the initial size of 1mb") {
+      val map = new HedgehogMap[String, String]
+      val value1 = "x" * 1024 * 1024
+      val value2 = "y" * 1024 * 1024
+
+      map.put("key1", value1)
+      map.put("key2", value2)
+
+      map.get("key1") shouldEqual value1
+      map.get("key2") shouldEqual value2
+    }
   }
 }

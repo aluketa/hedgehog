@@ -1,47 +1,50 @@
 package hedgehog
 
 import java.io.{Serializable => JavaSerializable}
-import java.nio.ByteBuffer
+import java.nio.MappedByteBuffer
 import java.nio.channels.FileChannel
-import java.nio.file.Files
+import java.nio.channels.FileChannel.MapMode._
+import java.nio.file.{Files, Path}
 import java.nio.file.StandardOpenOption._
 import java.util
 import java.util.AbstractMap.SimpleEntry
 import java.util.Map.Entry
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicLong
-import java.util.function.LongUnaryOperator
 import java.util.{Map => JavaMap}
 
 import scala.collection.JavaConversions._
+import scala.math.max
 
-class HedgehogMap[K, V <: JavaSerializable] extends JavaMap[K, V] {
+class HedgehogMap[K, V <: JavaSerializable](
+    filename: Path = Files.createTempFile("map-", ".hdg"),
+    initialFileSizeBytes: Long = 0) extends JavaMap[K, V] {
 
-  private val indexAndLengthMap = new ConcurrentHashMap[K, (Long, Int)]()
-  private val fileChannel =
-    FileChannel
-        .open(Files.createTempFile("map-", ".hdg"), CREATE, TRUNCATE_EXISTING,  READ, WRITE, DELETE_ON_CLOSE)
-  private val position = new AtomicLong(0L)
+  private val indexAndLengthMap = new ConcurrentHashMap[K, (Int, Int)]()
+  private var buffer: MappedByteBuffer = {
+    val fc = FileChannel.open(filename, CREATE, READ, WRITE, DELETE_ON_CLOSE)
+    val fileSizeBytes = max(initialFileSizeBytes, 1024 * 1024)
+    try { fc.map(READ_WRITE, 0, fileSizeBytes) } finally { fc.close() }
+  }
 
   override def put(key: K, value: V): V = {
-    val data = valueToBytes(value)
-    val writePosition = position.getAndUpdate(new LongUnaryOperator {
-      override def applyAsLong(operand: Long): Long = operand + data.length
-    })
+    try {
+      val data = valueToBytes(value)
+      if (buffer.capacity < buffer.position + data.length) {
+        grow(max(buffer.capacity + data.length, buffer.capacity + (buffer.capacity << 1)))
+      }
 
-    fileChannel.position(writePosition)
-    fileChannel.write(ByteBuffer.wrap(data))
-    indexAndLengthMap.put(key, (writePosition, data.length))
-    value
+      val writePosition = buffer.position
+      buffer.put(data)
+      indexAndLengthMap.put(key, (writePosition, data.length))
+      value
+    } finally {
+      buffer.force()
+    }
   }
 
   override def get(key: scala.Any): V = {
     Option(indexAndLengthMap.get(key)) match {
-      case Some((p, l)) =>
-        val data = new Array[Byte](l)
-        fileChannel.position(p)
-        fileChannel.read(ByteBuffer.wrap(data))
-        bytesToValue(data)
+      case Some((p, l)) => getValueAt(p, l)
       case _ => null.asInstanceOf[V]
     }
   }
@@ -60,8 +63,7 @@ class HedgehogMap[K, V <: JavaSerializable] extends JavaMap[K, V] {
 
   override def clear(): Unit = {
     indexAndLengthMap.clear()
-    position.set(0)
-    fileChannel.truncate(0)
+    buffer.position(0)
   }
 
   override def remove(key: scala.Any): V = {
@@ -77,4 +79,30 @@ class HedgehogMap[K, V <: JavaSerializable] extends JavaMap[K, V] {
 
   override def putAll(m: JavaMap[_ <: K, _ <: V]): Unit =
     m.foreach { case(k, v) => put(k, v) }
+
+  private def grow(newFileSize: Long): Unit = {
+    val tempMap = new HedgehogMap[K, V](Files.createTempFile("map-", ".hdg"), newFileSize)
+    indexAndLengthMap.entrySet
+      .map(e => (e.getKey, e.getValue))
+      .foreach { case (k, (p, l)) => tempMap.put(k, getValueAt(p, l)) }
+    val newMap = new HedgehogMap[K, V](filename, newFileSize)
+    indexAndLengthMap.entrySet
+        .map(e => (e.getKey, e.getValue))
+        .foreach { case (k, (p, l)) => newMap.put(k, tempMap.getValueAt(p, l)) }
+
+    buffer = newMap.buffer
+    buffer.force()
+  }
+
+  private def getValueAt(position: Int, length: Int): V = {
+    val mark = buffer.position
+    try {
+      buffer.position(position)
+      val data = new Array[Byte](length)
+      buffer.get(data)
+      bytesToValue[V](data)
+    } finally {
+      buffer.position(mark)
+    }
+  }
 }

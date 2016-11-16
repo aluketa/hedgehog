@@ -10,10 +10,10 @@ package object hedgehog {
     }
   }
 
-  def valueToBytes(value: AnyRef): Array[Byte] = {
+  def valueToBytes[T](value: T): Array[Byte] = {
     val out = new ByteArrayOutputStream()
     try {
-      new ObjectOutputStream(out).writeObject(this)
+      new ObjectOutputStream(out).writeObject(value)
       out.toByteArray
     } finally {
       out.close()
