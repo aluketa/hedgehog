@@ -142,7 +142,7 @@ class IndexStoreSpec extends FunSpec with Matchers {
     it("creates a persistent index store") {
       val filename = Files.createTempFile("idx-", ".hdg")
       try {
-        val indexStore1= new IndexStore[String](filename = filename, deleteOnClose = false)
+        val indexStore1 = new IndexStore[String](filename = filename, deleteOnClose = false)
         indexStore1.put("Test Key", 1, 1)
 
         val indexStore2 = new IndexStore[String](filename = filename, deleteOnClose = false)
