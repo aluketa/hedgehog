@@ -1,6 +1,6 @@
 package hedgehog
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream, Serializable => JavaSerializable}
+import java.io.{Serializable => JavaSerializable}
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.nio.file.Files
@@ -12,6 +12,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import java.util.function.LongUnaryOperator
 import java.util.{Map => JavaMap}
+
 import scala.collection.JavaConversions._
 
 class HedgehogMap[K, V <: JavaSerializable] extends JavaMap[K, V] {
@@ -34,16 +35,6 @@ class HedgehogMap[K, V <: JavaSerializable] extends JavaMap[K, V] {
     value
   }
 
-  private def valueToBytes(value: V): Array[Byte] = {
-    val out = new ByteArrayOutputStream()
-    try {
-      new ObjectOutputStream(out).writeObject(value)
-      out.toByteArray
-    } finally {
-      out.close()
-    }
-  }
-
   override def get(key: scala.Any): V = {
     Option(indexAndLengthMap.get(key)) match {
       case Some((p, l)) =>
@@ -52,15 +43,6 @@ class HedgehogMap[K, V <: JavaSerializable] extends JavaMap[K, V] {
         fileChannel.read(ByteBuffer.wrap(data))
         bytesToValue(data)
       case _ => null.asInstanceOf[V]
-    }
-  }
-
-  private def bytesToValue(bytes: Array[Byte]): V = {
-    val in = new ByteArrayInputStream(bytes)
-    try {
-      new ObjectInputStream(in).readObject.asInstanceOf[V]
-    } finally {
-      in.close()
     }
   }
 
