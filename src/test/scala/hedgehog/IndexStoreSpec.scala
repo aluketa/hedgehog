@@ -232,6 +232,17 @@ class IndexStoreSpec extends FunSpec with Matchers {
         Files.delete(filename)
       }
     }
+
+    it("supports entry of more keys than the initial capacity of 1024 entries for a persistent store") {
+      val filename = Files.createTempFile("idx-", ".hdg")
+      try {
+        val indexStore = new IndexStore[String](filename = filename, deleteOnClose = false)
+        (0 until 2048).foreach(i => indexStore.put(s"key$i", i * 31, i))
+        (0 until 2048).foreach(i => indexStore.get(s"key$i") shouldBe Some((i * 31, i)))
+      } finally {
+        Files.delete(filename)
+      }
+    }
   }
 }
 
