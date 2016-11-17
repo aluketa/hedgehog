@@ -187,6 +187,22 @@ class IndexStoreSpec extends FunSpec with Matchers {
       }
     }
 
+    it("returns the correct entries following a resize of a persistent store") {
+      val filename = Files.createTempFile("idx-", ".hdg")
+      try {
+        val key1: String = "x" * 1024 * 1024
+        val key2: String = "y" * 1024 * 1024
+
+        val indexStore = new IndexStore[String](filename = filename, deleteOnClose = false)
+        indexStore.put(key1, 1, 1)
+        indexStore.put(key2, 2, 2)
+
+        indexStore.entries.toSet shouldEqual Set((key1, (1, 1)), (key2, (2, 2)))
+      } finally {
+        Files.delete(filename)
+      }
+    }
+
     it("restores an empty persistent store (ensures restoration correctly handles max pos of zero)") {
       val filename = Files.createTempFile("idx-", ".hdg")
       try {

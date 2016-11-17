@@ -97,7 +97,7 @@ class IndexStore[K <: JavaSerializable](
     }
 
     if (maxPosition == 0) {
-      buffer.position(capacity * 4)
+      buffer.position((capacity * 4) + 4)
     } else {
       buffer.position(maxPosition)
       val lengthAtMaxPosition = buffer.getInt
