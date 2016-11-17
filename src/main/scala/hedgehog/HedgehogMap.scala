@@ -15,15 +15,39 @@ import scala.collection.JavaConversions._
 import scala.math.max
 import scala.reflect.ClassTag
 
-class HedgehogMap[K <: JavaSerializable: ClassTag, V <: JavaSerializable](
-    filename: Path = Files.createTempFile("map-", ".hdg"),
-    initialFileSizeBytes: Long = 0) extends JavaMap[K, V] {
+object HedgehogMap {
+  def createEphemeralMap[K <: JavaSerializable: ClassTag, V <: JavaSerializable]: HedgehogMap[K, V] =
+    new HedgehogMap[K, V]
 
-  private val indexStore = new IndexStore[K]()
+  def createPersistentMap[K <: JavaSerializable: ClassTag, V <: JavaSerializable](
+      dataPath: Path,
+      name: String): HedgehogMap[K, V] =
+    new HedgehogMap[K, V](
+      filename = dataPath.resolve(s"map-$name.hdg"),
+      indexFilename = dataPath.resolve(s"idx-$name.hdg"),
+      deleteOnClose = false)
+}
+
+class HedgehogMap[K <: JavaSerializable: ClassTag, V <: JavaSerializable] private (
+    filename: Path = Files.createTempFile("map-", ".hdg"),
+    indexFilename: Path = Files.createTempFile("idx-", ".hdg"),
+    initialFileSizeBytes: Long = 0,
+    deleteOnClose: Boolean = true) extends JavaMap[K, V] {
+
+  private val indexStore = new IndexStore[K](filename = indexFilename, deleteOnClose = deleteOnClose)
   private var buffer: MappedByteBuffer = {
-    val fc = FileChannel.open(filename, CREATE, READ, WRITE, DELETE_ON_CLOSE)
-    val fileSizeBytes = max(initialFileSizeBytes, 1024 * 1024)
+    val openOptions = Seq(CREATE, READ, WRITE) ++ (if (deleteOnClose) Seq(DELETE_ON_CLOSE) else Seq())
+    val fc = FileChannel.open(filename, openOptions:_*)
+    val fileSizeBytes = Seq(initialFileSizeBytes, 1024L * 1024L, fc.size).max
     try { fc.map(READ_WRITE, 0, fileSizeBytes) } finally { fc.close() }
+  }
+
+  if (indexStore.size > 0){
+    val (maxPosition, lengthAtMaxPosition) =
+      indexStore.entries
+        .foldLeft((0, 0)) { case ((rp, rl), (_, (p, l))) => if (p >= rp) (p, l) else (rp, rl) }
+
+    buffer.position(maxPosition + lengthAtMaxPosition)
   }
 
   override def put(key: K, value: V): V = {
@@ -90,9 +114,9 @@ class HedgehogMap[K <: JavaSerializable: ClassTag, V <: JavaSerializable](
     m.foreach { case(k, v) => put(k, v) }
 
   private def grow(newFileSize: Long): Unit = {
-    val tempMap = new HedgehogMap[K, V](Files.createTempFile("map-", ".hdg"), newFileSize)
+    val tempMap = new HedgehogMap[K, V](Files.createTempFile("map-", ".hdg"), Files.createTempFile("idx-", ".hdg"), newFileSize, deleteOnClose = true)
     indexStore.entries.foreach { case (k, (p, l)) => tempMap.put(k, getValueAt(p, l)) }
-    val newMap = new HedgehogMap[K, V](filename, newFileSize)
+    val newMap = new HedgehogMap[K, V](filename, indexFilename, newFileSize, deleteOnClose = deleteOnClose)
     indexStore.entries.foreach { case (k, (p, l)) => newMap.put(k, tempMap.getValueAt(p, l)) }
 
     buffer = newMap.buffer
