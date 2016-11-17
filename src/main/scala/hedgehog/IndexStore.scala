@@ -21,13 +21,14 @@ class IndexStore[K <: JavaSerializable](
   private var buffer: MappedByteBuffer = {
     val openOptions = Seq(CREATE, READ, WRITE) ++ (if (deleteOnClose) Seq(DELETE_ON_CLOSE) else Seq())
     val fc = FileChannel.open(filename, openOptions:_*)
-    val fileSizeBytes = max(initialFileSizeBytes, 1024 * 1024)
+    val fileSizeBytes: Long = Seq(initialFileSizeBytes, 1024L * 1024L, fc.size).max
     try { fc.map(READ_WRITE, 0, fileSizeBytes) } finally { fc.close() }
   }
-  if (!deleteOnClose && Files.exists(filename)) {
-    restore()
-  } else {
+
+  if (buffer.getInt == 0) {
     clear()
+  } else {
+    restore()
   }
 
   def get(key: K): Option[(Int, Int)] =
@@ -87,13 +88,14 @@ class IndexStore[K <: JavaSerializable](
   private def restore(): Unit = {
     buffer.position(0)
     capacity = buffer.getInt
-    if (capacity > 0) {
-      val maxPosition = (0 until capacity).map(i => getIntByIndex(i)).max
+
+    val maxPosition = (0 until capacity).map(i => getIntByIndex(i)).max
+    if (maxPosition == 0) {
+      buffer.position(capacity * 4)
+    } else {
       buffer.position(maxPosition)
       val lengthAtMaxPosition = buffer.getInt
       buffer.position(maxPosition + lengthAtMaxPosition + 4)
-    } else {
-      clear()
     }
   }
 
@@ -155,9 +157,9 @@ class IndexStore[K <: JavaSerializable](
   }
 
   private def grow(newCapacity: Int, newFileSize: Long): Unit = {
-    val tempStore = new IndexStore[K](Files.createTempFile("idx-", ".hdg"), newCapacity, newFileSize)
+    val tempStore = new IndexStore[K](Files.createTempFile("idx-", ".hdg"), newCapacity, newFileSize, deleteOnClose = true)
     entries.foreach { case (k, (p, l)) => tempStore.put(k, p, l) }
-    val newStore = new IndexStore[K](filename, newCapacity, newFileSize)
+    val newStore = new IndexStore[K](filename, newCapacity, newFileSize, deleteOnClose = deleteOnClose)
     tempStore.entries.foreach { case (k, (p, l)) => newStore.put(k, p, l) }
 
     capacity = newCapacity
