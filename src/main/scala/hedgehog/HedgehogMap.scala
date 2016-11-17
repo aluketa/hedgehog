@@ -4,15 +4,15 @@ import java.io.{Serializable => JavaSerializable}
 import java.nio.MappedByteBuffer
 import java.nio.channels.FileChannel
 import java.nio.channels.FileChannel.MapMode._
-import java.nio.file.{Files, Path}
 import java.nio.file.StandardOpenOption._
+import java.nio.file.{Files, Path}
 import java.util
 import java.util.AbstractMap.SimpleEntry
 import java.util.Map.Entry
 import java.util.{Map => JavaMap}
 
 import scala.collection.JavaConversions._
-import scala.math.max
+import scala.math.{max, min}
 import scala.reflect.ClassTag
 
 object HedgehogMap {
@@ -35,12 +35,7 @@ class HedgehogMap[K <: JavaSerializable: ClassTag, V <: JavaSerializable] privat
     deleteOnClose: Boolean = true) extends JavaMap[K, V] {
 
   private val indexStore = new IndexStore[K](filename = indexFilename, deleteOnClose = deleteOnClose)
-  private var buffer: MappedByteBuffer = {
-    val openOptions = Seq(CREATE, READ, WRITE) ++ (if (deleteOnClose) Seq(DELETE_ON_CLOSE) else Seq())
-    val fc = FileChannel.open(filename, openOptions:_*)
-    val fileSizeBytes = Seq(initialFileSizeBytes, 1024L * 1024L, fc.size).max
-    try { fc.map(READ_WRITE, 0, fileSizeBytes) } finally { fc.close() }
-  }
+  private var buffer: MappedByteBuffer = createBuffer(filename, initialFileSizeBytes, deleteOnClose)
 
   if (indexStore.size > 0){
     val (maxPosition, lengthAtMaxPosition) =
@@ -55,7 +50,7 @@ class HedgehogMap[K <: JavaSerializable: ClassTag, V <: JavaSerializable] privat
       val previousValue = get(key)
       val data = valueToBytes(value)
       if (buffer.capacity < buffer.position + data.length) {
-        grow(max(buffer.capacity + data.length, buffer.capacity + (buffer.capacity << 1)))
+        grow(max(buffer.capacity + data.length, buffer.capacity * 2))
       }
 
       val writePosition = buffer.position
@@ -113,14 +108,38 @@ class HedgehogMap[K <: JavaSerializable: ClassTag, V <: JavaSerializable] privat
   override def putAll(m: JavaMap[_ <: K, _ <: V]): Unit =
     m.foreach { case(k, v) => put(k, v) }
 
-  private def grow(newFileSize: Long): Unit = {
-    val tempMap = new HedgehogMap[K, V](Files.createTempFile("map-", ".hdg"), Files.createTempFile("idx-", ".hdg"), newFileSize, deleteOnClose = true)
-    indexStore.entries.foreach { case (k, (p, l)) => tempMap.put(k, getValueAt(p, l)) }
-    val newMap = new HedgehogMap[K, V](filename, indexFilename, newFileSize, deleteOnClose = deleteOnClose)
-    indexStore.entries.foreach { case (k, (p, l)) => newMap.put(k, tempMap.getValueAt(p, l)) }
+  private def createBuffer(filename: Path, fileSizeBytes: Long, deleteOnClose: Boolean): MappedByteBuffer = {
+    val openOptions = Seq(CREATE, READ, WRITE) ++ (if (deleteOnClose) Seq(DELETE_ON_CLOSE) else Seq())
+    val fc = FileChannel.open(filename, openOptions:_*)
+    try {
+      fc.map(READ_WRITE, 0, Seq(min(fileSizeBytes, Int.MaxValue.toLong), 1024L * 1024L, fc.size).max)
+    } finally {
+      fc.close()
+    }
+  }
 
-    buffer = newMap.buffer
+  private def grow(newFileSize: Long): Unit = {
+    val writePosition = buffer.position
+
+    val tempBuffer: MappedByteBuffer = createBuffer(Files.createTempFile("map-", ".hdg"), newFileSize, deleteOnClose = true)
+    val newBuffer: MappedByteBuffer = createBuffer(filename, newFileSize, deleteOnClose)
+
+    copyBuffers(buffer, tempBuffer)
+    copyBuffers(tempBuffer, newBuffer)
+
+    buffer = newBuffer
+    buffer.position(writePosition)
     buffer.force()
+  }
+
+  private def copyBuffers(src: MappedByteBuffer, dest: MappedByteBuffer): Unit = {
+    indexStore.entries.foreach { case (_, (p, l)) =>
+      val data = new Array[Byte](l)
+      src.position(p)
+      src.get(data)
+      dest.position(p)
+      dest.put(data)
+    }
   }
 
   private def getValueAt(position: Int, length: Int): V = {

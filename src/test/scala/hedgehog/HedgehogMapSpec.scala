@@ -180,7 +180,10 @@ class HedgehogMapSpec extends FunSpec with Matchers {
         map1.put("key1", value1)
         map1.put("key2", value2)
 
+        //println(map1.keySet)
+
         val map2 = HedgehogMap.createPersistentMap[String, String](tempDir, "test-map")
+        //println(map2.get("key1"))
         map2.get("key1") shouldEqual value1
         map2.get("key2") shouldEqual value2
       } finally {
