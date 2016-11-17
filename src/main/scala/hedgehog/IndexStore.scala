@@ -89,7 +89,13 @@ class IndexStore[K <: JavaSerializable](
     buffer.position(0)
     capacity = buffer.getInt
 
-    val maxPosition = (0 until capacity).map(i => getIntByIndex(i)).max
+    val (maxPosition, existingSize) = (0 until capacity).map(getIntByIndex).foldLeft((0, 0)) {
+      case ((rmp, rsz), i) =>
+        val mp = if (i > rmp) i else rmp
+        val sz = rsz + (if (i != 0) 1 else 0)
+        (mp, sz)
+    }
+
     if (maxPosition == 0) {
       buffer.position(capacity * 4)
     } else {
@@ -97,6 +103,8 @@ class IndexStore[K <: JavaSerializable](
       val lengthAtMaxPosition = buffer.getInt
       buffer.position(maxPosition + lengthAtMaxPosition + 4)
     }
+
+    currentSize = existingSize
   }
 
   @tailrec
