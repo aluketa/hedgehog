@@ -1,4 +1,4 @@
-val sv = "2.11.7"
+val sv = "2.11.8"
 
 scalaSource in IntegrationTest := baseDirectory.value / "src" / "test-integration" / "scala"
 

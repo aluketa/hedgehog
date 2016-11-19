@@ -9,8 +9,9 @@ import java.nio.file.{Files, Path}
 
 import scala.annotation.tailrec
 import scala.math.max
+import scala.reflect.ClassTag
 
-class IndexStore[K <: JavaSerializable](
+class IndexStore[K <: JavaSerializable: ClassTag](
     filename: Path = Files.createTempFile("idx-", ".hdg"),
     initialCapacity: Int = 0,
     initialFileSizeBytes: Long = 0,
@@ -48,7 +49,6 @@ class IndexStore[K <: JavaSerializable](
     if (put(indexHolder, currentBuffer, currentCapacity)) {
       currentSize = currentSize + 1
     }
-    currentBuffer.force()
   }
 
   private def put(indexHolder: IndexHolder[K], buffer: MappedByteBuffer, capacity: Int): Boolean = {
@@ -93,6 +93,10 @@ class IndexStore[K <: JavaSerializable](
         currentSize = currentSize - 1
       case _ => Unit
     }
+  }
+
+  def force(): Unit = {
+    currentBuffer.force()
   }
 
   private def restore(): Unit = {
@@ -195,12 +199,11 @@ class IndexStore[K <: JavaSerializable](
 
     currentCapacity = newCapacity
     currentBuffer = newBuffer
-    currentBuffer.force()
   }
 }
 
 object IndexHolder {
-  def apply[K <: JavaSerializable](bytes: Array[Byte]): IndexHolder[K] = bytesToValue(bytes)
+  def apply[K <: JavaSerializable: ClassTag](bytes: Array[Byte]): IndexHolder[K] = bytesToValue[IndexHolder[K]](bytes)
 }
 
 case class IndexHolder[K <: JavaSerializable](key: K, valuePosition: Int, valueLength: Int) {

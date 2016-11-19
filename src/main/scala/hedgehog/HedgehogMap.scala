@@ -16,10 +16,10 @@ import scala.math.{max, min}
 import scala.reflect.ClassTag
 
 object HedgehogMap {
-  def createEphemeralMap[K <: JavaSerializable: ClassTag, V <: JavaSerializable]: HedgehogMap[K, V] =
+  def createEphemeralMap[K <: JavaSerializable: ClassTag, V <: JavaSerializable: ClassTag]: HedgehogMap[K, V] =
     new HedgehogMap[K, V]
 
-  def createPersistentMap[K <: JavaSerializable: ClassTag, V <: JavaSerializable](
+  def createPersistentMap[K <: JavaSerializable: ClassTag, V <: JavaSerializable: ClassTag](
       dataPath: Path,
       name: String): HedgehogMap[K, V] =
     new HedgehogMap[K, V](
@@ -28,7 +28,7 @@ object HedgehogMap {
       deleteOnClose = false)
 }
 
-class HedgehogMap[K <: JavaSerializable: ClassTag, V <: JavaSerializable] private (
+class HedgehogMap[K <: JavaSerializable: ClassTag, V <: JavaSerializable: ClassTag] private (
     filename: Path = Files.createTempFile("map-", ".hdg"),
     indexFilename: Path = Files.createTempFile("idx-", ".hdg"),
     initialFileSizeBytes: Long = 0,
@@ -46,20 +46,16 @@ class HedgehogMap[K <: JavaSerializable: ClassTag, V <: JavaSerializable] privat
   }
 
   override def put(key: K, value: V): V = {
-    try {
-      val previousValue = get(key)
-      val data = valueToBytes(value)
-      if (buffer.capacity < buffer.position + data.length) {
-        grow(max(buffer.capacity + data.length, buffer.capacity * 2))
-      }
-
-      val writePosition = buffer.position
-      buffer.put(data)
-      indexStore.put(key, writePosition, data.length)
-      previousValue
-    } finally {
-      buffer.force()
+    val previousValue = get(key)
+    val data = valueToBytes(value)
+    if (buffer.capacity < buffer.position + data.length) {
+      grow(max(buffer.capacity + data.length, buffer.capacity * 2))
     }
+
+    val writePosition = buffer.position
+    buffer.put(data)
+    indexStore.put(key, writePosition, data.length)
+    previousValue
   }
 
   override def get(key: scala.Any): V = key match {
@@ -107,6 +103,11 @@ class HedgehogMap[K <: JavaSerializable: ClassTag, V <: JavaSerializable] privat
 
   override def putAll(m: JavaMap[_ <: K, _ <: V]): Unit =
     m.foreach { case(k, v) => put(k, v) }
+
+  def force(): Unit = {
+    buffer.force()
+    indexStore.force()
+  }
 
   private def createBuffer(filename: Path, fileSizeBytes: Long, deleteOnClose: Boolean): MappedByteBuffer = {
     val openOptions = Seq(CREATE, READ, WRITE) ++ (if (deleteOnClose) Seq(DELETE_ON_CLOSE) else Seq())
