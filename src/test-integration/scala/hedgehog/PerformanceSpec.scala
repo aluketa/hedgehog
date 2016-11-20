@@ -6,7 +6,7 @@ import org.scalatest.{FunSpec, Matchers}
 
 class PerformanceSpec extends FunSpec with Matchers {
   describe("Performance") {
-    it("on average, should be no more than two and a half times as slow as ConcurrentHashMap putting large values") {
+    it("on average, should be no more than three times as slow as ConcurrentHashMap putting large values") {
       val concurrentHashMap = new ConcurrentHashMap[Integer, String]
       val hedgehogMap = HedgehogMap.createEphemeralMap[Integer, String]
       Timer.reset()
@@ -18,7 +18,7 @@ class PerformanceSpec extends FunSpec with Matchers {
       (0 until 500).foreach(i => Timer.time(hedgehogMap.put(1, "x" * 1024 * 1024)))
       val hedgehogPutAverage = Timer.average
 
-      hedgehogPutAverage shouldBe < (concurrentPutAverage * 2.5)
+      hedgehogPutAverage shouldBe < (concurrentPutAverage * 3.0)
     }
   }
 }
