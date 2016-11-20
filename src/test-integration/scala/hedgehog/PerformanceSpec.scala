@@ -11,14 +11,25 @@ class PerformanceSpec extends FunSpec with Matchers {
       val hedgehogMap = HedgehogMap.createEphemeralMap[Integer, String]
       Timer.reset()
 
-      (0 until 500).foreach(i => Timer.time(concurrentHashMap.put(1, "x" * 1024 * 1024)))
+      (0 until 500).foreach(i => Timer.time(concurrentHashMap.put(i, "x" * 1024 * 1024)))
       val concurrentPutAverage = Timer.average
       Timer.reset()
 
-      (0 until 500).foreach(i => Timer.time(hedgehogMap.put(1, "x" * 1024 * 1024)))
+      (0 until 500).foreach(i => Timer.time(hedgehogMap.put(i, "x" * 1024 * 1024)))
       val hedgehogPutAverage = Timer.average
 
       hedgehogPutAverage shouldBe < (concurrentPutAverage * 3.0)
     }
+
+    it("on average, should take no more than 2ms to retrieve an item for a given index") {
+      val hedgehogMap = HedgehogMap.createEphemeralMap[Integer, String]
+      Timer.reset()
+      (0 until 500).foreach(i => hedgehogMap.put(i, "x" * 1024 * 1024))
+
+      (0 until 500).foreach(i => Timer.time(hedgehogMap.get(i)) shouldEqual "x" * 1024 * 1024)
+
+      Timer.average shouldBe < (2.0)
+    }
   }
+
 }
