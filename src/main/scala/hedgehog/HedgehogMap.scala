@@ -49,7 +49,7 @@ class HedgehogMap[K <: JavaSerializable: ClassTag, V <: JavaSerializable: ClassT
     val previousValue = get(key)
     val data = valueToBytes(value)
     if (buffer.capacity < buffer.position + data.length) {
-      grow(max(buffer.capacity + data.length, buffer.capacity * 2))
+      grow(max(buffer.capacity + data.length, buffer.capacity * 2L))
     }
 
     val writePosition = buffer.position

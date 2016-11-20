@@ -30,6 +30,11 @@ class PerformanceSpec extends FunSpec with Matchers {
 
       Timer.average shouldBe < (2.0)
     }
-  }
 
+    it("Supports storage of data larger than Max Integer") {
+      val hedgehogMap = HedgehogMap.createEphemeralMap[Integer, String]
+      (0 until 2047 + 100).foreach(i => hedgehogMap.put(i, "x" * 1024 * 1024))
+      hedgehogMap.size shouldBe 2047 + 100
+    }
+  }
 }
