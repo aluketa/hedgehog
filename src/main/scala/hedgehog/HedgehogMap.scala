@@ -121,16 +121,11 @@ class HedgehogMap[K <: JavaSerializable: ClassTag, V <: JavaSerializable: ClassT
 
   private def grow(newFileSize: Long): Unit = {
     val writePosition = buffer.position
-
-    val tempBuffer: MappedByteBuffer = createBuffer(Files.createTempFile("map-", ".hdg"), newFileSize, deleteOnClose = true)
     val newBuffer: MappedByteBuffer = createBuffer(filename, newFileSize, deleteOnClose)
-
-    copyBuffers(buffer, tempBuffer)
-    copyBuffers(tempBuffer, newBuffer)
+    copyBuffers(buffer, newBuffer)
 
     buffer = newBuffer
     buffer.position(writePosition)
-    buffer.force()
   }
 
   private def copyBuffers(src: MappedByteBuffer, dest: MappedByteBuffer): Unit = {

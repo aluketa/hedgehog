@@ -53,5 +53,9 @@ package object hedgehog {
         println("No timings!")
       }
     }
+
+    def average: Double = times.sum.toDouble / times.size.toDouble
+
+    def reset(): Unit = times.clear()
   }
 }
