@@ -19,12 +19,7 @@ class IndexStore[K <: JavaSerializable: ClassTag](
   private var currentCapacity: Int = max(initialCapacity, 1024)
   private var currentSize: Int = 0
 
-  private var currentBuffer: MappedByteBuffer = {
-    val openOptions = Seq(CREATE, READ, WRITE) ++ (if (!isPersistent) Seq(DELETE_ON_CLOSE) else Seq())
-    val fc = FileChannel.open(filename, openOptions:_*)
-    val fileSizeBytes: Long = Seq(initialFileSizeBytes, 1024L * 1024L, fc.size).max
-    try { fc.map(READ_WRITE, 0, fileSizeBytes) } finally { fc.close() }
-  }
+  private var currentBuffer: MappedByteBuffer = createBuffer(filename, initialFileSizeBytes, isPersistent)
 
   if (currentBuffer.getInt == 0) {
     clear()
@@ -179,25 +174,22 @@ class IndexStore[K <: JavaSerializable: ClassTag](
   }
 
   private def grow(newCapacity: Int, newFileSize: Long): Unit = {
-    val tempBuffer = {
-      val fc = FileChannel.open(Files.createTempFile("map-", ".hdg"), CREATE, READ, WRITE, DELETE_ON_CLOSE)
-      try { fc.map(READ_WRITE, 0, newFileSize) } finally { fc.close() }
-    }
-
+    val tempBuffer = createBuffer(Files.createTempFile("map-", ".hdg"), newFileSize, isPersistent = false)
     clear(tempBuffer, newCapacity)
     entries(currentBuffer, currentCapacity).foreach { case (k, (p, l)) => put(IndexHolder(k, p, l), tempBuffer, newCapacity) }
 
-    val newBuffer = {
-      val openOptions = Seq(CREATE, READ, WRITE) ++ (if (!isPersistent) Seq(DELETE_ON_CLOSE) else Seq())
-      val fc = FileChannel.open(filename, openOptions:_*)
-      try { fc.map(READ_WRITE, 0, newFileSize) } finally { fc.close() }
-    }
-
+    val newBuffer = createBuffer(filename, newFileSize, isPersistent = isPersistent)
     clear(newBuffer, newCapacity)
     entries(tempBuffer, newCapacity).foreach { case (k, (p, l)) => put(IndexHolder(k, p, l), newBuffer, newCapacity) }
 
     currentCapacity = newCapacity
     currentBuffer = newBuffer
+  }
+
+  private def createBuffer(filename: Path, fileSizeBytes: Long, isPersistent: Boolean): MappedByteBuffer = {
+    val openOptions = Seq(CREATE, READ, WRITE) ++ (if (!isPersistent) Seq(DELETE_ON_CLOSE) else Seq())
+    val fc = FileChannel.open(filename, openOptions:_*)
+    try { fc.map(READ_WRITE, 0, Seq(fileSizeBytes, 1024L * 1024L, fc.size).max) } finally { fc.close() }
   }
 }
 
