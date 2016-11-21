@@ -32,10 +32,10 @@ class IndexStore[K <: JavaSerializable: ClassTag](
     restore()
   }
 
-  def get(key: K): Option[(Int, Int)] =
+  def get(key: K): Option[(Long, Int)] =
     findIndex(key).map { case (_, ih) => (ih.valuePosition, ih.valueLength) }
 
-  def put(key: K, valuePosition: Int, valueLength: Int): Unit = {
+  def put(key: K, valuePosition: Long, valueLength: Int): Unit = {
     val indexHolder = IndexHolder(key, valuePosition, valueLength)
 
     if (currentSize > currentCapacity / 2) {
@@ -61,9 +61,9 @@ class IndexStore[K <: JavaSerializable: ClassTag](
     isNewEntry
   }
 
-  def entries: Iterable[(K, (Int, Int))] = entries(currentBuffer, currentCapacity)
+  def entries: Iterable[(K, (Long, Int))] = entries(currentBuffer, currentCapacity)
 
-  private def entries(buffer: MappedByteBuffer, capacity: Int): Iterable[(K, (Int, Int))] =
+  private def entries(buffer: MappedByteBuffer, capacity: Int): Iterable[(K, (Long, Int))] =
     (0 until capacity)
         .map(i => getIntByIndex(buffer, i))
         .filter(_ != 0)
@@ -196,7 +196,6 @@ class IndexStore[K <: JavaSerializable: ClassTag](
     clear(newBuffer, newCapacity)
     entries(tempBuffer, newCapacity).foreach { case (k, (p, l)) => put(IndexHolder(k, p, l), newBuffer, newCapacity) }
 
-
     currentCapacity = newCapacity
     currentBuffer = newBuffer
   }
@@ -206,6 +205,6 @@ object IndexHolder {
   def apply[K <: JavaSerializable: ClassTag](bytes: Array[Byte]): IndexHolder[K] = bytesToValue[IndexHolder[K]](bytes)
 }
 
-case class IndexHolder[K <: JavaSerializable](key: K, valuePosition: Int, valueLength: Int) {
+case class IndexHolder[K <: JavaSerializable](key: K, valuePosition: Long, valueLength: Int) {
   lazy val bytes: Array[Byte] = valueToBytes(this)
 }
