@@ -11,11 +11,11 @@ import scala.math.{ceil, floor}
 class LargeMappedByteBuffer(
     filename: Path,
     fileSizeBytes: Long,
-    deleteOnClose: Boolean,
+    isPersistent: Boolean,
     maxShardSize: Int = Int.MaxValue) {
 
   private val shards: Seq[MappedByteBuffer] = {
-    val openOptions = Seq(CREATE, READ, WRITE) ++ (if (deleteOnClose) Seq(DELETE_ON_CLOSE) else Seq())
+    val openOptions = Seq(CREATE, READ, WRITE) ++ (if (!isPersistent) Seq(DELETE_ON_CLOSE) else Seq())
     val fc = FileChannel.open(filename, openOptions:_*)
     val targetFileSize: Long = Seq(fileSizeBytes, 1024L * 1024L, fc.size).max
 

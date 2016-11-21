@@ -21,17 +21,17 @@ object HedgehogMap {
     new HedgehogMap[K, V](
       filename = dataPath.resolve(s"map-$name.hdg"),
       indexFilename = dataPath.resolve(s"idx-$name.hdg"),
-      deleteOnClose = false)
+      isPersistent = true)
 }
 
 class HedgehogMap[K <: JavaSerializable: ClassTag, V <: JavaSerializable: ClassTag] private (
     filename: Path = Files.createTempFile("map-", ".hdg"),
     indexFilename: Path = Files.createTempFile("idx-", ".hdg"),
     initialFileSizeBytes: Long = 0,
-    deleteOnClose: Boolean = true) extends JavaMap[K, V] {
+    isPersistent: Boolean = false) extends JavaMap[K, V] {
 
-  private val indexStore = new IndexStore[K](filename = indexFilename, deleteOnClose = deleteOnClose)
-  private var buffer: LargeMappedByteBuffer = new LargeMappedByteBuffer(filename, initialFileSizeBytes, deleteOnClose)
+  private val indexStore = new IndexStore[K](filename = indexFilename, isPersistent = isPersistent)
+  private var buffer: LargeMappedByteBuffer = new LargeMappedByteBuffer(filename, initialFileSizeBytes, isPersistent)
 
   if (indexStore.size > 0){
     val (maxPosition, lengthAtMaxPosition) =
@@ -107,7 +107,7 @@ class HedgehogMap[K <: JavaSerializable: ClassTag, V <: JavaSerializable: ClassT
 
   private def grow(newFileSize: Long): Unit = {
     val writePosition = buffer.position
-    val newBuffer: LargeMappedByteBuffer = new LargeMappedByteBuffer(filename, newFileSize, deleteOnClose)
+    val newBuffer: LargeMappedByteBuffer = new LargeMappedByteBuffer(filename, newFileSize, isPersistent)
     copyBuffers(buffer, newBuffer)
 
     buffer = newBuffer

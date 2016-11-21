@@ -142,10 +142,10 @@ class IndexStoreSpec extends FunSpec with Matchers {
     it("creates a persistent index store") {
       val filename = Files.createTempFile("idx-", ".hdg")
       try {
-        val indexStore1 = new IndexStore[String](filename = filename, deleteOnClose = false)
+        val indexStore1 = new IndexStore[String](filename = filename, isPersistent = true)
         indexStore1.put("Test Key", 1, 1)
 
-        val indexStore2 = new IndexStore[String](filename = filename, deleteOnClose = false)
+        val indexStore2 = new IndexStore[String](filename = filename, isPersistent = true)
         indexStore2.get("Test Key") shouldBe Some((1, 1))
       } finally {
         Files.delete(filename)
@@ -155,10 +155,10 @@ class IndexStoreSpec extends FunSpec with Matchers {
     it("successfully appends to the end of a restored persistent index store") {
       val filename = Files.createTempFile("idx-", ".hdg")
       try {
-        val indexStore1 = new IndexStore[String](filename = filename, deleteOnClose = false)
+        val indexStore1 = new IndexStore[String](filename = filename, isPersistent = true)
         indexStore1.put("Test Key", 1, 1)
 
-        val indexStore2 = new IndexStore[String](filename = filename, deleteOnClose = false)
+        val indexStore2 = new IndexStore[String](filename = filename, isPersistent = true)
         indexStore2.put("Test Key2", 2, 2)
 
         indexStore2.entries.toSet shouldEqual Set(
@@ -175,11 +175,11 @@ class IndexStoreSpec extends FunSpec with Matchers {
         val key1: String = "x" * 1024 * 1024
         val key2: String = "y" * 1024 * 1024
 
-        val indexStore1 = new IndexStore[String](filename = filename, deleteOnClose = false)
+        val indexStore1 = new IndexStore[String](filename = filename, isPersistent = true)
         indexStore1.put(key1, 1, 1)
         indexStore1.put(key2, 2, 2)
 
-        val indexStore2 = new IndexStore[String](filename = filename, deleteOnClose = false)
+        val indexStore2 = new IndexStore[String](filename = filename, isPersistent = true)
         indexStore2.get(key1) shouldBe Some((1, 1))
         indexStore2.get(key2) shouldBe Some((2, 2))
       } finally {
@@ -193,7 +193,7 @@ class IndexStoreSpec extends FunSpec with Matchers {
         val key1: String = "x" * 1024 * 1024
         val key2: String = "y" * 1024 * 1024
 
-        val indexStore = new IndexStore[String](filename = filename, deleteOnClose = false)
+        val indexStore = new IndexStore[String](filename = filename, isPersistent = true)
         indexStore.put(key1, 1, 1)
         indexStore.put(key2, 2, 2)
 
@@ -206,10 +206,10 @@ class IndexStoreSpec extends FunSpec with Matchers {
     it("restores an empty persistent store (ensures restoration correctly handles max pos of zero)") {
       val filename = Files.createTempFile("idx-", ".hdg")
       try {
-        val indexStore1 = new IndexStore[String](filename = filename, deleteOnClose = false)
+        val indexStore1 = new IndexStore[String](filename = filename, isPersistent = true)
         indexStore1.size shouldBe 0
 
-        val indexStore2 = new IndexStore[String](filename = filename, deleteOnClose = false)
+        val indexStore2 = new IndexStore[String](filename = filename, isPersistent = true)
         indexStore2.size shouldBe 0
         indexStore2.put("Test", 1, 1)
         indexStore2.get("Test") shouldBe Some(1, 1)
@@ -221,12 +221,12 @@ class IndexStoreSpec extends FunSpec with Matchers {
     it("sets the correct index size when restoring an existing persistent store") {
       val filename = Files.createTempFile("idx-", ".hdg")
       try {
-        val indexStore1 = new IndexStore[String](filename = filename, deleteOnClose = false)
+        val indexStore1 = new IndexStore[String](filename = filename, isPersistent = true)
         indexStore1.put("Test1", 1, 1)
         indexStore1.put("Test2", 2, 2)
         indexStore1.put("Test3", 3, 3)
 
-        val indexStore2 = new IndexStore[String](filename = filename, deleteOnClose = false)
+        val indexStore2 = new IndexStore[String](filename = filename, isPersistent = true)
         indexStore2.size shouldBe 3
       } finally {
         Files.delete(filename)
@@ -236,7 +236,7 @@ class IndexStoreSpec extends FunSpec with Matchers {
     it("supports entry of more keys than the initial capacity of 1024 entries for a persistent store") {
       val filename = Files.createTempFile("idx-", ".hdg")
       try {
-        val indexStore = new IndexStore[String](filename = filename, deleteOnClose = false)
+        val indexStore = new IndexStore[String](filename = filename, isPersistent = true)
         (0 until 2048).foreach(i => indexStore.put(s"key$i", i * 31, i))
         (0 until 2048).foreach(i => indexStore.get(s"key$i") shouldBe Some((i * 31, i)))
       } finally {

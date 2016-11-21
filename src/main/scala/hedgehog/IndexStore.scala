@@ -15,12 +15,12 @@ class IndexStore[K <: JavaSerializable: ClassTag](
     filename: Path = Files.createTempFile("idx-", ".hdg"),
     initialCapacity: Int = 0,
     initialFileSizeBytes: Long = 0,
-    deleteOnClose: Boolean = true) {
+    isPersistent: Boolean = false) {
   private var currentCapacity: Int = max(initialCapacity, 1024)
   private var currentSize: Int = 0
 
   private var currentBuffer: MappedByteBuffer = {
-    val openOptions = Seq(CREATE, READ, WRITE) ++ (if (deleteOnClose) Seq(DELETE_ON_CLOSE) else Seq())
+    val openOptions = Seq(CREATE, READ, WRITE) ++ (if (!isPersistent) Seq(DELETE_ON_CLOSE) else Seq())
     val fc = FileChannel.open(filename, openOptions:_*)
     val fileSizeBytes: Long = Seq(initialFileSizeBytes, 1024L * 1024L, fc.size).max
     try { fc.map(READ_WRITE, 0, fileSizeBytes) } finally { fc.close() }
@@ -188,7 +188,7 @@ class IndexStore[K <: JavaSerializable: ClassTag](
     entries(currentBuffer, currentCapacity).foreach { case (k, (p, l)) => put(IndexHolder(k, p, l), tempBuffer, newCapacity) }
 
     val newBuffer = {
-      val openOptions = Seq(CREATE, READ, WRITE) ++ (if (deleteOnClose) Seq(DELETE_ON_CLOSE) else Seq())
+      val openOptions = Seq(CREATE, READ, WRITE) ++ (if (!isPersistent) Seq(DELETE_ON_CLOSE) else Seq())
       val fc = FileChannel.open(filename, openOptions:_*)
       try { fc.map(READ_WRITE, 0, newFileSize) } finally { fc.close() }
     }
