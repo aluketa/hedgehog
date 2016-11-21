@@ -124,7 +124,7 @@ class HedgehogMapSpec extends FunSpec with Matchers {
         ("Test3", "Data3"))
     }
 
-    it("stores data larger than the initial size of 1mb") {
+    it("stores data larger than the initial size of 1mb (ephemeral)") {
       val map = HedgehogMap.createEphemeralMap[String, String]
       val value1 = "x" * 1024 * 1024
       val value2 = "y" * 1024 * 1024
@@ -134,6 +134,25 @@ class HedgehogMapSpec extends FunSpec with Matchers {
 
       map.get("key1") shouldEqual value1
       map.get("key2") shouldEqual value2
+    }
+
+    it("stores data larger than the initial size of 1mb (persistent)") {
+      val tempDir = Files.createTempDirectory("hdg")
+      try {
+        val map = HedgehogMap.createPersistentMap[String, String](tempDir, "test-map")
+        val value1 = "x" * 1024 * 1024
+        val value2 = "y" * 1024 * 1024
+
+        map.put("key1", value1)
+        map.put("key2", value2)
+
+        map.get("key1") shouldEqual value1
+        map.get("key2") shouldEqual value2
+      } finally {
+        Files.delete(tempDir.resolve("map-test-map.hdg"))
+        Files.delete(tempDir.resolve("idx-test-map.hdg"))
+        Files.delete(tempDir)
+      }
     }
 
     it("creates a persistent map") {

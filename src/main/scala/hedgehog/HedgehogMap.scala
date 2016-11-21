@@ -108,7 +108,11 @@ class HedgehogMap[K <: JavaSerializable: ClassTag, V <: JavaSerializable: ClassT
   private def grow(newFileSize: Long): Unit = {
     val writePosition = buffer.position
     val newBuffer: LargeMappedByteBuffer = new LargeMappedByteBuffer(filename, newFileSize, isPersistent)
-    copyBuffers(buffer, newBuffer)
+    if (isPersistent) {
+      buffer.force()
+    } else {
+      copyBuffers(buffer, newBuffer)
+    }
 
     buffer = newBuffer
     buffer.position(writePosition)
