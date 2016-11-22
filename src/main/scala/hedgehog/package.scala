@@ -6,7 +6,7 @@ import scala.reflect.ClassTag
 import scala.reflect._
 
 package object hedgehog {
-  def bytesToValue[T <: JavaSerializable: ClassTag](bytes: Array[Byte]): T = {
+  private[hedgehog] def bytesToValue[T <: JavaSerializable: ClassTag](bytes: Array[Byte]): T = {
     if (classTag[T].runtimeClass == classOf[String]) {
       new String(bytes).asInstanceOf[T]
     } else {
@@ -19,7 +19,7 @@ package object hedgehog {
     }
   }
 
-  def valueToBytes[T <: JavaSerializable: ClassTag](value: T): Array[Byte] =
+  private[hedgehog] def valueToBytes[T <: JavaSerializable: ClassTag](value: T): Array[Byte] =
     value match {
       case str: String => str.getBytes
       case _ =>
@@ -32,7 +32,7 @@ package object hedgehog {
         }
     }
 
-  object Timer {
+  private[hedgehog] object Timer {
     private val times = new mutable.ArrayBuffer[Long]
 
     def time[T](func: => T): T = {

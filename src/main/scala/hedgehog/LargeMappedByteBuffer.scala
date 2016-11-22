@@ -8,7 +8,7 @@ import FileChannel.MapMode.READ_WRITE
 
 import scala.math.{ceil, floor}
 
-class LargeMappedByteBuffer(
+private[hedgehog] class LargeMappedByteBuffer(
     filename: Path,
     fileSizeBytes: Long,
     isPersistent: Boolean,

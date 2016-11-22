@@ -11,7 +11,7 @@ import scala.annotation.tailrec
 import scala.math.max
 import scala.reflect.ClassTag
 
-class IndexStore[K <: JavaSerializable: ClassTag](
+private[hedgehog] class IndexStore[K <: JavaSerializable: ClassTag](
     filename: Path = Files.createTempFile("idx-", ".hdg"),
     initialCapacity: Int = 0,
     initialFileSizeBytes: Long = 0,
@@ -208,10 +208,10 @@ class IndexStore[K <: JavaSerializable: ClassTag](
   }
 }
 
-object IndexHolder {
+private[hedgehog] object IndexHolder {
   def apply[K <: JavaSerializable: ClassTag](bytes: Array[Byte]): IndexHolder[K] = bytesToValue[IndexHolder[K]](bytes)
 }
 
-case class IndexHolder[K <: JavaSerializable](key: K, valuePosition: Long, valueLength: Int) {
+private[hedgehog] case class IndexHolder[K <: JavaSerializable](key: K, valuePosition: Long, valueLength: Int) {
   lazy val bytes: Array[Byte] = valueToBytes(this)
 }
