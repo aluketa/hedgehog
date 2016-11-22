@@ -245,5 +245,102 @@ class HedgehogMapSpec extends FunSpec with Matchers {
         Files.delete(tempDir)
       }
     }
+
+    it("compacts the map") {
+      val tempDir = Files.createTempDirectory("hdg")
+      try {
+        val map = HedgehogMap.createPersistentMap[String, String](tempDir, "test-map")
+        map.put("x" * 1024 * 1024, "a" * 1024 * 1024)
+        map.put("y" * 1024 * 1024, "b" * 1024 * 1024)
+        map.put("z" * 1024 * 1024, "c" * 1024 * 1024)
+        Files.size(tempDir.resolve("map-test-map.hdg")) shouldBe 4194304
+        Files.size(tempDir.resolve("idx-test-map.hdg")) shouldBe 9437184
+
+        map.compact()
+        map.force()
+        map.size shouldBe 3
+        Files.size(tempDir.resolve("map-test-map.hdg")) shouldBe 3145728
+        Files.size(tempDir.resolve("idx-test-map.hdg")) shouldBe 3158503
+        map.get("x" * 1024 * 1024) shouldEqual "a" * 1024 * 1024
+        map.get("y" * 1024 * 1024) shouldEqual "b" * 1024 * 1024
+        map.get("z" * 1024 * 1024) shouldEqual "c" * 1024 * 1024
+
+        map.remove("x" * 1024 * 1024)
+        map.compact()
+        map.force()
+        map.size shouldBe 2
+        map.get("y" * 1024 * 1024) shouldEqual "b" * 1024 * 1024
+        map.get("z" * 1024 * 1024) shouldEqual "c" * 1024 * 1024
+        Files.size(tempDir.resolve("map-test-map.hdg")) shouldBe 2097152
+        Files.size(tempDir.resolve("idx-test-map.hdg")) shouldBe 3170823
+
+        map.remove("y" * 1024 * 1024)
+        map.compact()
+        map.force()
+        map.size shouldBe 1
+        map.get("z" * 1024 * 1024) shouldEqual "c" * 1024 * 1024
+        Files.size(tempDir.resolve("map-test-map.hdg")) shouldBe 1048576
+        Files.size(tempDir.resolve("idx-test-map.hdg")) shouldBe 3145728
+
+        map.remove("z" * 1024 * 1024)
+        map.compact()
+        map.force()
+        map.size shouldBe 0
+        Files.size(tempDir.resolve("map-test-map.hdg")) shouldBe 1048576
+        Files.size(tempDir.resolve("idx-test-map.hdg")) shouldBe 1048576
+      } finally {
+        Files.delete(tempDir.resolve("map-test-map.hdg"))
+        Files.delete(tempDir.resolve("idx-test-map.hdg"))
+        Files.delete(tempDir)
+      }
+    }
+
+    it("compacts an empty map") {
+      val tempDir = Files.createTempDirectory("hdg")
+      try {
+        val map = HedgehogMap.createPersistentMap[String, String](tempDir, "test-map")
+
+        map.compact()
+        map.force()
+        map.size shouldBe 0
+        Files.size(tempDir.resolve("map-test-map.hdg")) shouldBe 1024 * 1024
+        Files.size(tempDir.resolve("idx-test-map.hdg")) shouldBe 1024 * 1024
+      } finally {
+        Files.delete(tempDir.resolve("map-test-map.hdg"))
+        Files.delete(tempDir.resolve("idx-test-map.hdg"))
+        Files.delete(tempDir)
+      }
+    }
+
+    it("compacts an ephemeral map") {
+      val map = HedgehogMap.createEphemeralMap[String, String]
+      map.compact()
+      map.force()
+      map.size shouldBe 0
+
+      map.put("Key", "Value")
+      map.get("Key") shouldEqual "Value"
+    }
+
+    it("accepts new additions following compaction") {
+      val tempDir = Files.createTempDirectory("hdg")
+      try {
+        val map = HedgehogMap.createPersistentMap[String, String](tempDir, "test-map")
+
+        map.compact()
+        map.force()
+        map.size shouldBe 0
+        Files.size(tempDir.resolve("map-test-map.hdg")) shouldBe 1024 * 1024
+        Files.size(tempDir.resolve("idx-test-map.hdg")) shouldBe 1024 * 1024
+
+        map.put("key", "value")
+        map.size shouldBe 1
+        map.get("key") shouldEqual "value"
+      } finally {
+        Files.delete(tempDir.resolve("map-test-map.hdg"))
+        Files.delete(tempDir.resolve("idx-test-map.hdg"))
+        Files.delete(tempDir)
+      }
+    }
   }
 }

@@ -94,6 +94,21 @@ class IndexStore[K <: JavaSerializable: ClassTag](
     currentBuffer.force()
   }
 
+  def compact(overrideSourceIndex: Option[IndexStore[K]] = None): Unit = {
+    val src = overrideSourceIndex.getOrElse(this)
+    val compactSize: Long = (0 to src.currentSize).map(i => getIntByIndex(src.currentBuffer, i).toLong).sum + (src.currentSize * 4L) + 4L
+    val tempIndex = new IndexStore[K](initialCapacity = src.currentSize, initialFileSizeBytes = compactSize)
+    src.entries.foreach { case (k, (p, l)) => tempIndex.put(k, p, l) }
+
+    if (isPersistent) {
+      Files.delete(filename)
+    }
+
+    currentBuffer = createBuffer(filename, compactSize, isPersistent)
+    clear()
+    tempIndex.entries.foreach { case (k, (p, l)) => put(k, p, l) }
+  }
+
   private def restore(): Unit = {
     currentBuffer.position(0)
     currentCapacity = currentBuffer.getInt

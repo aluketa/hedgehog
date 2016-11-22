@@ -105,20 +105,48 @@ class HedgehogMap[K <: JavaSerializable: ClassTag, V <: JavaSerializable: ClassT
     indexStore.force()
   }
 
+  def compact(): Unit = {
+    val compactSize: Long = indexStore.entries.map { case (_, (_, l)) => l.toLong }.sum
+    val tempBuffer = new LargeMappedByteBuffer(Files.createTempFile("map-", ".hdg"), compactSize, isPersistent = false)
+
+    tempBuffer.position(0)
+    val tempIndexStore = new IndexStore[K](isPersistent = false)
+
+    indexStore.entries.foreach {
+      case (key, (p, l)) =>
+        val data = new Array[Byte](l)
+        buffer.position(p)
+        buffer.get(data)
+
+        val writePosition = tempBuffer.position
+        tempBuffer.put(data)
+        tempIndexStore.put(key, writePosition, l)
+    }
+
+    if (isPersistent) {
+      Files.delete(filename)
+    }
+
+    val newBuffer = new LargeMappedByteBuffer(filename, compactSize, isPersistent)
+    copyBuffers(tempIndexStore, tempBuffer, newBuffer)
+    buffer = newBuffer
+    indexStore.compact(overrideSourceIndex = Some(tempIndexStore))
+  }
+
   private def grow(newFileSize: Long): Unit = {
     val writePosition = buffer.position
     val newBuffer: LargeMappedByteBuffer = new LargeMappedByteBuffer(filename, newFileSize, isPersistent)
     if (isPersistent) {
       buffer.force()
     } else {
-      copyBuffers(buffer, newBuffer)
+      copyBuffers(indexStore, buffer, newBuffer)
     }
 
     buffer = newBuffer
     buffer.position(writePosition)
   }
 
-  private def copyBuffers(src: LargeMappedByteBuffer, dest: LargeMappedByteBuffer): Unit = {
+  private def copyBuffers(indexStore: IndexStore[K], src: LargeMappedByteBuffer, dest: LargeMappedByteBuffer): Unit = {
     indexStore.entries.foreach { case (_, (p, l)) =>
       val data = new Array[Byte](l)
       src.position(p)

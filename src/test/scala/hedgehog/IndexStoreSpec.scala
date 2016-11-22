@@ -243,6 +243,84 @@ class IndexStoreSpec extends FunSpec with Matchers {
         Files.delete(filename)
       }
     }
+
+    it("compacts the store") {
+      val filename = Files.createTempFile("idx-", ".hdg")
+      try {
+        val indexStore = new IndexStore[String](filename, isPersistent = true)
+        indexStore.put("x" * 1024 * 1024, 1, 1)
+        indexStore.put("y" * 1024 * 1024, 2, 2)
+        indexStore.put("z" * 1024 * 1024, 3, 3)
+
+        indexStore.compact()
+        indexStore.force()
+        indexStore.size shouldBe 3
+        Files.size(filename) shouldBe 3158503
+
+        indexStore.remove("x" * 1024 * 1024)
+        indexStore.compact()
+        indexStore.force()
+        indexStore.size shouldBe 2
+        indexStore.get("y" * 1024 * 1024) shouldBe Some(2, 2)
+        indexStore.get("z" * 1024 * 1024) shouldBe Some(3, 3)
+        Files.size(filename) shouldBe 3154399
+
+        indexStore.remove("y" * 1024 * 1024)
+        indexStore.compact()
+        indexStore.force()
+        indexStore.size shouldBe 1
+        indexStore.get("z" * 1024 * 1024) shouldBe Some(3, 3)
+        Files.size(filename) shouldBe 1052837
+
+        indexStore.remove("z" * 1024 * 1024)
+        indexStore.compact()
+        indexStore.force()
+        indexStore.size shouldBe 0
+        Files.size(filename) shouldBe 1024 * 1024
+      } finally {
+        Files.delete(filename)
+      }
+    }
+
+    it("compacts an empty store") {
+      val filename = Files.createTempFile("idx-", ".hdg")
+      try {
+        val indexStore = new IndexStore[String](filename, isPersistent = true)
+        indexStore.compact()
+        indexStore.force()
+
+        indexStore.size shouldBe 0
+        Files.size(filename) shouldBe 1024 * 1024
+      } finally {
+        Files.delete(filename)
+      }
+    }
+
+    it("compacts an ephemeral store") {
+      val indexStore = new IndexStore[String]
+      indexStore.compact()
+      indexStore.force()
+
+      indexStore.size shouldBe 0
+    }
+
+    it("accepts new additions following compaction") {
+      val filename = Files.createTempFile("idx-", ".hdg")
+      try {
+        val indexStore = new IndexStore[String](filename, isPersistent = true)
+        indexStore.compact()
+        indexStore.force()
+
+        indexStore.size shouldBe 0
+        Files.size(filename) shouldBe 1024 * 1024
+
+        indexStore.put("key1", 1, 1)
+        indexStore.size shouldBe 1
+        indexStore.get("key1") shouldBe Some((1, 1))
+      } finally {
+        Files.delete(filename)
+      }
+    }
   }
 }
 
