@@ -9,14 +9,14 @@ import scala.collection.JavaConversions._
 class HedgehogMapSpec extends FunSpec with Matchers {
   describe("Hedgehog Map") {
     it("puts and gets a test value") {
-      val map = HedgehogMap.createEphemeralMap[String, String]
+      val map = HedgehogMap.createEphemeralMap[String, String]()
       map.put("Test", "Data")
 
       map.get("Test") shouldEqual "Data"
     }
 
     it("updates an existing value") {
-      val map = HedgehogMap.createEphemeralMap[String, String]
+      val map = HedgehogMap.createEphemeralMap[String, String]()
       map.put("Test", "Data") shouldBe null
       map.put("Test", "Updated Data") shouldEqual "Data"
 
@@ -24,7 +24,7 @@ class HedgehogMapSpec extends FunSpec with Matchers {
     }
 
     it("indicates if the map contains a given key") {
-      val map = HedgehogMap.createEphemeralMap[String, String]
+      val map = HedgehogMap.createEphemeralMap[String, String]()
       map.put("Test", "Data")
 
       map.containsKey("Test") shouldBe true
@@ -32,7 +32,7 @@ class HedgehogMapSpec extends FunSpec with Matchers {
     }
 
     it("returns the key set") {
-      val map = HedgehogMap.createEphemeralMap[String, String]
+      val map = HedgehogMap.createEphemeralMap[String, String]()
       map.put("Test1", "Data")
       map.put("Test2", "Data")
       map.put("Test3", "Data")
@@ -41,7 +41,7 @@ class HedgehogMapSpec extends FunSpec with Matchers {
     }
 
     it("contains a collection of values") {
-      val map = HedgehogMap.createEphemeralMap[String, String]
+      val map = HedgehogMap.createEphemeralMap[String, String]()
       map.put("Test1", "Data1")
       map.put("Test2", "Data2")
       map.put("Test3", "Data3")
@@ -50,7 +50,7 @@ class HedgehogMapSpec extends FunSpec with Matchers {
     }
 
     it("returns the entry set") {
-      val map = HedgehogMap.createEphemeralMap[String, String]
+      val map = HedgehogMap.createEphemeralMap[String, String]()
       map.put("Test1", "Data1")
       map.put("Test2", "Data2")
       map.put("Test3", "Data3")
@@ -62,7 +62,7 @@ class HedgehogMapSpec extends FunSpec with Matchers {
     }
 
     it("returns the size of the map") {
-      val map = HedgehogMap.createEphemeralMap[String, String]
+      val map = HedgehogMap.createEphemeralMap[String, String]()
       map.put("Test1", "Data1")
       map.put("Test2", "Data2")
       map.put("Test3", "Data3")
@@ -71,7 +71,7 @@ class HedgehogMapSpec extends FunSpec with Matchers {
     }
 
     it("clears the map") {
-      val map = HedgehogMap.createEphemeralMap[String, String]
+      val map = HedgehogMap.createEphemeralMap[String, String]()
       map.put("Test1", "Data1")
       map.put("Test2", "Data2")
       map.put("Test3", "Data3")
@@ -83,7 +83,7 @@ class HedgehogMapSpec extends FunSpec with Matchers {
     }
 
     it("removes an element from the map") {
-      val map = HedgehogMap.createEphemeralMap[String, String]
+      val map = HedgehogMap.createEphemeralMap[String, String]()
       map.put("Test1", "Data1")
       map.put("Test2", "Data2")
       map.put("Test3", "Data3")
@@ -95,7 +95,7 @@ class HedgehogMapSpec extends FunSpec with Matchers {
     }
 
     it("verifies that the map contains a given value") {
-      val map = HedgehogMap.createEphemeralMap[String, String]
+      val map = HedgehogMap.createEphemeralMap[String, String]()
       map.put("Test1", "Data1")
       map.put("Test2", "Data2")
       map.put("Test3", "Data3")
@@ -105,14 +105,14 @@ class HedgehogMapSpec extends FunSpec with Matchers {
     }
 
     it("verifies if the map is empty") {
-      val map = HedgehogMap.createEphemeralMap[String, String]
+      val map = HedgehogMap.createEphemeralMap[String, String]()
       map.isEmpty shouldBe true
       map.put("Test1", "Data1")
       map.isEmpty shouldBe false
     }
 
     it("puts all items into the map") {
-      val map = HedgehogMap.createEphemeralMap[String, String]
+      val map = HedgehogMap.createEphemeralMap[String, String]()
       map.putAll(Map(
         "Test1" -> "Data1",
         "Test2" -> "Data2",
@@ -125,7 +125,7 @@ class HedgehogMapSpec extends FunSpec with Matchers {
     }
 
     it("stores data larger than the initial size of 1mb (ephemeral)") {
-      val map = HedgehogMap.createEphemeralMap[String, String]
+      val map = HedgehogMap.createEphemeralMap[String, String]()
       val value1 = "x" * 1024 * 1024
       val value2 = "y" * 1024 * 1024
 
@@ -313,7 +313,7 @@ class HedgehogMapSpec extends FunSpec with Matchers {
     }
 
     it("compacts an ephemeral map") {
-      val map = HedgehogMap.createEphemeralMap[String, String]
+      val map = HedgehogMap.createEphemeralMap[String, String]()
       map.compact()
       map.force()
       map.size shouldBe 0
