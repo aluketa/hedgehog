@@ -56,11 +56,11 @@ class HedgehogMap[K <: JavaSerializable: ClassTag, V <: JavaSerializable: ClassT
 
   private def shardForKey(key: K): Shard = shards(key.hashCode.abs % shards.size)
 
-  private def atomically[T](func: (Seq[(IndexStore[K], AtomicReference[LargeMappedByteBuffer], Path)]) => T): T = {
+  private def atomically[T](func: Seq[Shard] => T): T = {
     val allLocks = (0 until shards.size).map(i => shards(i).lock)
     allLocks.foreach(_.lock())
     try {
-      func(shards.values.map(v => (v.indexStore, v.buffer, v.filename)).toSeq)
+      func(shards.values.toSeq)
     } finally {
       allLocks.reverse.foreach(_.unlock())
     }
@@ -68,16 +68,16 @@ class HedgehogMap[K <: JavaSerializable: ClassTag, V <: JavaSerializable: ClassT
 
   override def put(key: K, value: V): V = {
     shardForKey(key).atomically {
-      (indexStore, buffer, filename) =>
+      shard =>
         val previousValue = get(key)
         val data = valueToBytes(value)
-        if (buffer.get.capacity < buffer.get.position + data.length) {
-          grow(max(buffer.get.capacity + data.length, buffer.get.capacity * 2L), indexStore, buffer, filename)
+        if (shard.buffer.get.capacity < shard.buffer.get.position + data.length) {
+          grow(max(shard.buffer.get.capacity + data.length, shard.buffer.get.capacity * 2L), shard)
         }
 
-        val writePosition = buffer.get.position
-        buffer.get.put(data)
-        indexStore.put(key, writePosition, data.length)
+        val writePosition = shard.buffer.get.position
+        shard.buffer.get.put(data)
+        shard.indexStore.put(key, writePosition, data.length)
         previousValue
     }
   }
@@ -85,9 +85,9 @@ class HedgehogMap[K <: JavaSerializable: ClassTag, V <: JavaSerializable: ClassT
   override def get(key: scala.Any): V = key match {
     case typedKey: K =>
       shardForKey(typedKey).atomically {
-        (indexStore, buffer, _) =>
-          indexStore.get(typedKey) match {
-            case Some((p, l)) => getValueAt(buffer.get, p, l)
+        shard =>
+          shard.indexStore.get(typedKey) match {
+            case Some((p, l)) => getValueAt(shard.buffer.get, p, l)
             case _ => null.asInstanceOf[V]
           }
       }
@@ -95,37 +95,36 @@ class HedgehogMap[K <: JavaSerializable: ClassTag, V <: JavaSerializable: ClassT
   }
 
   override def containsKey(key: scala.Any): Boolean = key match {
-    case typedKey: K => shardForKey(typedKey).atomically( (indexStore, _, _) => indexStore.contains(typedKey))
+    case typedKey: K => shardForKey(typedKey).atomically(shard => shard.indexStore.contains(typedKey))
     case _ => false
   }
 
   override def keySet: util.Set[K] =
-    atomically(indexStoresAndBuffers =>
-      indexStoresAndBuffers.map(_._1).flatMap(_.entries.map(_._1)).toSet[K])
+    atomically(_.map(_.indexStore).flatMap(_.entries.map(_._1)).toSet[K])
 
   override def values: util.Collection[V] =
-    atomically(indexStoresAndBuffers =>
-      indexStoresAndBuffers.flatMap(x => x._1.entries.map { case (_, (p, l)) => getValueAt(x._2.get, p, l) }))
+    atomically(_.flatMap(shard =>
+        shard.indexStore.entries.map { case (_, (p, l)) => getValueAt(shard.buffer.get, p, l) }))
 
   override def entrySet: util.Set[Entry[K, V]] =
-    atomically(indexStoresAndBuffers =>
-      setAsJavaSet(indexStoresAndBuffers.flatMap(x =>
-        x._1.entries.map { case (k, (p, l)) =>
-          new SimpleEntry[K, V](k, getValueAt(x._2.get, p, l)) }).toSet))
+    atomically(shards =>
+      setAsJavaSet(shards.flatMap(shard =>
+        shard.indexStore.entries.map { case (k, (p, l)) =>
+          new SimpleEntry[K, V](k, getValueAt(shard.buffer.get, p, l)) }).toSet))
 
-  override def size: Int = atomically(indexStoresAndBuffers => indexStoresAndBuffers.map(_._1.size).sum)
+  override def size: Int = atomically(_.map(_.indexStore.size).sum)
 
   override def clear(): Unit =
     atomically(_.foreach {
-      case (indexStore, buffer, _) =>
-        indexStore.clear()
-        buffer.get.position(0)
+      shard =>
+        shard.indexStore.clear()
+        shard.buffer.get.position(0)
     })
 
   override def remove(key: scala.Any): V = {
     val result = get(key)
     key match {
-      case typedKey: K => shardForKey(typedKey).atomically((indexStore, _, _) => indexStore.remove(typedKey))
+      case typedKey: K => shardForKey(typedKey).atomically(shard => shard.indexStore.remove(typedKey))
       case _ => Unit
     }
 
@@ -135,32 +134,32 @@ class HedgehogMap[K <: JavaSerializable: ClassTag, V <: JavaSerializable: ClassT
   override def containsValue(value: scala.Any): Boolean =
     values.contains(value)
 
-  override def isEmpty: Boolean = atomically(indexStoresAndBuffers => indexStoresAndBuffers.forall(_._1.size == 0))
+  override def isEmpty: Boolean = atomically(_.forall(_.indexStore.size == 0))
 
   override def putAll(m: JavaMap[_ <: K, _ <: V]): Unit =
     m.foreach { case(k, v) => put(k, v) }
 
   def force(): Unit =
     atomically(_.foreach {
-      case (indexStore, buffer, _) =>
-        indexStore.force()
-        buffer.get.force()
+      shard =>
+        shard.indexStore.force()
+        shard.buffer.get.force()
     })
 
-  def compact(): Unit = atomically(_.foreach(x => compact(x._1, x._2, x._3)))
+  def compact(): Unit = atomically(_.foreach(compact))
 
-  private def compact(indexStore: IndexStore[K], buffer: AtomicReference[LargeMappedByteBuffer], filename: Path): Unit = {
-    val compactSize: Long = indexStore.entries.map { case (_, (_, l)) => l.toLong }.sum
+  private def compact(shard: Shard): Unit = {
+    val compactSize: Long = shard.indexStore.entries.map { case (_, (_, l)) => l.toLong }.sum
     val tempBuffer = new LargeMappedByteBuffer(Files.createTempFile("map-", ".hdg"), compactSize, isPersistent = false)
 
     tempBuffer.position(0)
     val tempIndexStore = new IndexStore[K](isPersistent = false)
 
-    indexStore.entries.foreach {
+    shard.indexStore.entries.foreach {
       case (key, (p, l)) =>
         val data = new Array[Byte](l)
-        buffer.get.position(p)
-        buffer.get.get(data)
+        shard.buffer.get.position(p)
+        shard.buffer.get.get(data)
 
         val writePosition = tempBuffer.position
         tempBuffer.put(data)
@@ -168,26 +167,26 @@ class HedgehogMap[K <: JavaSerializable: ClassTag, V <: JavaSerializable: ClassT
     }
 
     if (isPersistent) {
-      Files.delete(filename)
+      Files.delete(shard.filename)
     }
 
-    val newBuffer = new LargeMappedByteBuffer(filename, compactSize, isPersistent)
+    val newBuffer = new LargeMappedByteBuffer(shard.filename, compactSize, isPersistent)
     copyBuffers(tempIndexStore, tempBuffer, newBuffer)
-    buffer.set(newBuffer)
-    indexStore.compact(overrideSourceIndex = Some(tempIndexStore))
+    shard.buffer.set(newBuffer)
+    shard.indexStore.compact(overrideSourceIndex = Some(tempIndexStore))
   }
 
-  private def grow(newFileSize: Long, indexStore: IndexStore[K], buffer: AtomicReference[LargeMappedByteBuffer], filename: Path): Unit = {
-    val writePosition = buffer.get.position
-    val newBuffer: LargeMappedByteBuffer = new LargeMappedByteBuffer(filename, newFileSize, isPersistent)
+  private def grow(newFileSize: Long, shard: Shard): Unit = {
+    val writePosition = shard.buffer.get.position
+    val newBuffer: LargeMappedByteBuffer = new LargeMappedByteBuffer(shard.filename, newFileSize, isPersistent)
     if (isPersistent) {
-      buffer.get.force()
+      shard.buffer.get.force()
     } else {
-      copyBuffers(indexStore, buffer.get, newBuffer)
+      copyBuffers(shard.indexStore, shard.buffer.get, newBuffer)
     }
 
-    buffer.set(newBuffer)
-    buffer.get.position(writePosition)
+    shard.buffer.set(newBuffer)
+    shard.buffer.get.position(writePosition)
   }
 
   private def copyBuffers(indexStore: IndexStore[K], src: LargeMappedByteBuffer, dest: LargeMappedByteBuffer): Unit = {
@@ -213,10 +212,10 @@ class HedgehogMap[K <: JavaSerializable: ClassTag, V <: JavaSerializable: ClassT
   }
 
   private case class Shard(lock: ReentrantLock, filename: Path, indexStore: IndexStore[K], buffer: AtomicReference[LargeMappedByteBuffer]) {
-    def atomically[T](func: (IndexStore[K], AtomicReference[LargeMappedByteBuffer], Path) => T): T = {
+    def atomically[T](func: Shard => T): T = {
       lock.lock()
       try {
-        func(indexStore, buffer, filename)
+        func(this)
       } finally {
         lock.unlock()
       }
