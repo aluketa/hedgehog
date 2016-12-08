@@ -7,7 +7,8 @@ import java.util.AbstractMap.SimpleEntry
 import java.util.Map.Entry
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.locks.ReentrantLock
-import java.util.{UUID, Map => JavaMap}
+import java.util.{Objects, UUID, Map => JavaMap}
+import java.util.concurrent.ConcurrentMap
 
 import scala.collection.JavaConversions._
 import scala.math.max
@@ -32,7 +33,7 @@ class HedgehogMap[K <: JavaSerializable: ClassTag, V <: JavaSerializable: ClassT
     name: String,
     initialFileSizeBytes: Long = 0,
     isPersistent: Boolean = false,
-    concurrencyFactor: Int = 1) extends JavaMap[K, V] {
+    concurrencyFactor: Int = 1) extends ConcurrentMap[K, V] {
 
   private val shards: Map[Int, Shard] = (0 until concurrencyFactor).map(i => (i, createShard(i))).toMap
 
@@ -138,6 +139,49 @@ class HedgehogMap[K <: JavaSerializable: ClassTag, V <: JavaSerializable: ClassT
 
   override def putAll(m: JavaMap[_ <: K, _ <: V]): Unit =
     m.foreach { case(k, v) => put(k, v) }
+
+  override def replace(key: K, oldValue: V, newValue: V): Boolean =
+    shardForKey(key).atomically { _ =>
+      if (this.containsKey(key) && Objects.equals(this.get(key), oldValue)) {
+        this.put(key, newValue)
+        true
+      } else {
+        false
+      }
+    }
+
+  override def replace(key: K, value: V): V = {
+    shardForKey(key).atomically { _ =>
+      if (this.containsKey(key)) {
+        this.put(key, value)
+      } else {
+        null.asInstanceOf[V]
+      }
+    }
+  }
+
+  override def remove(key: scala.Any, value: scala.Any): Boolean = key match {
+    case typedKey: K =>
+      shardForKey(typedKey).atomically { _ =>
+        if (this.containsKey(typedKey) && Objects.equals(this.get(typedKey), value)) {
+          this.remove(key)
+          true
+        } else {
+          false
+        }
+      }
+    case _ => false
+  }
+
+  override def putIfAbsent(key: K, value: V): V = {
+    shardForKey(key).atomically { _ =>
+      if (!this.containsKey(key)) {
+        this.put(key, value)
+      } else {
+        this.get(key)
+      }
+    }
+  }
 
   def force(): Unit =
     atomically(_.foreach {

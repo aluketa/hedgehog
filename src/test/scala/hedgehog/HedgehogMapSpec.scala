@@ -342,5 +342,58 @@ class HedgehogMapSpec extends FunSpec with Matchers {
         Files.delete(tempDir)
       }
     }
+
+    it("replaces keys with a given value if the current value equals a given prior value") {
+      val map = HedgehogMap.createEphemeralMap[String, String]()
+      map.put("test", "old-value")
+      map.replace("test", "old-value", "new-value")
+
+      map.get("test") shouldEqual "new-value"
+    }
+
+    it("does not replace keys if the given prior value does not match the current value") {
+      val map = HedgehogMap.createEphemeralMap[String, String]()
+      map.put("test", "old-value")
+      map.replace("test", "incorrect-value", "new-value")
+
+      map.get("test") shouldEqual "old-value"
+    }
+
+    it("replace a value regardless of the current value") {
+      val map = HedgehogMap.createEphemeralMap[String, String]()
+      map.put("test", "old-value")
+      map.replace("test", "new-value")
+
+      map.get("test") shouldEqual "new-value"
+    }
+
+    it("removes a key if the corresponding current value matches the given value") {
+      val map = HedgehogMap.createEphemeralMap[String, String]()
+      map.put("test", "current-value")
+
+      withClue("map remove returned")(map.remove("test", "current-value") shouldBe true)
+      withClue("contains test key")(map.containsKey("test") shouldBe false)
+    }
+
+    it("does not remove a key if the corresponding current value does not match the given value") {
+      val map = HedgehogMap.createEphemeralMap[String, String]()
+      map.put("test", "current-value")
+
+      withClue("map remove returned")(map.remove("test", "incorrect-value") shouldBe false)
+      withClue("contains test key")(map.containsKey("test") shouldBe true)
+    }
+
+    it("puts a given value if the key is current absent") {
+      val map = HedgehogMap.createEphemeralMap[String, String]()
+      map.putIfAbsent("test", "new value") shouldBe null
+      map.get("test") shouldEqual "new value"
+    }
+
+    it("does not put a given value if the key already exists") {
+      val map = HedgehogMap.createEphemeralMap[String, String]()
+      map.put("test", "current value")
+      map.putIfAbsent("test", "new value") shouldEqual "current value"
+      map.get("test") shouldEqual "current value"
+    }
   }
 }
